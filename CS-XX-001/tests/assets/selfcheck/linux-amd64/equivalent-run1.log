@@ -1,0 +1,8 @@
+case: equivalent run: 1 container: fresh from cs-xx-001:1.0.0
+tree before: 0 changed files, HEAD tree bdea6eaad6894e6167d11d03ae43019d10127467
+patch tests/calibration/equivalent.patch exit: 0
+tree when scored: 9 changed files, working tree 7ba3942adf5be2cfa1fee447fa4ad249a0cf6a5d
+command: docker exec -u root <container> sh /tests/test.sh
+test.sh exit: 0
+reward: 1
+--- score.stderr (tail)

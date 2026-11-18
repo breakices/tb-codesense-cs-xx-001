@@ -1,0 +1,690 @@
+schema_version = "1.4"
+artifacts = ["/logs/verifier/result.json", "/logs/verifier/reward.txt"]
+
+[task]
+name = "codesense/cs-xx-001"
+version = "1.1.1"
+description = "含税金额精度整改：在 django-oscar 快照上修掉两个对账症状，并守住依赖同一批金额的其他环节，单轮作答，单元测试判分。"
+
+[[task.authors]]
+name = "XX"
+
+[agent]
+timeout_sec = 2700
+user = "dev"
+
+[verifier]
+timeout_sec = 600
+user = "root"
+
+[environment]
+build_timeout_sec = 1800
+cpus = 2
+memory_mb = 4096
+workdir = "/workspace"
+
+[metadata]
+id = "CS-XX-001"
+title = "含税金额精度整改"
+platform = "linux/amd64"
+objective = "证明模型在修掉报出来的症状时，能自己找出并守住代码库里依赖同一批金额的其他环节，包括上线前已经在系统里的购物车和订单，而不是把一份看似合理的两步草稿当成完整方案。"
+focus_points = ["②隐蔽缺陷定位与归因", "④语言/运行时语义边界", "⑥约束理解与tradeoff判断"]
+trap_type = "修症状的改动会破坏题面没有点名的义务：单价精度一变，按明细逐件累加的分批结算加不回订单行，页面各行与合计差一分，价格没变的购物车行被提示价格变动，搜索索引里的商品价格不再是页面上显示的价格；另有默认舍入是银行家舍入（Decimal.quantize、DecimalField 落库、Babel 格式化）。"
+badpattern = "改一查十"
+turns_count = 1
+has_embedded_challenge = true
+challenge_premise_is_false = true
+expert_minutes = 150
+code_origin = "opensource"
+code_license = "BSD-3-Clause"
+version = "1.1.1"
+author = "XX"
+source_note = "代码是 django-oscar 的真实提交 4dc248a6382cbc26d95644925467e143fa6debcf（2025-02-19，4.0 之后的开发分支），未做改写。题目以该项目真实的舍入问题和公开维护历史为基础：2025-03-07 的 #4448 先在购物车合计等处补了舍入，2025-04-09 的 #4455 又修改了税率策略、行金额、运费折扣中的同类问题；到 4.2.2（a5ed3c9c1）为止，价格变动提示误报、订单行与价格明细差一分等下游问题仍然存在，反例程序可以复现。搜索索引价格和部分下游验收是基于真实金额依赖关系补充的评测要求，不宣称它们全部来自上游提交。快照取在第一次修复之前。"
+prompt = '''
+# 含税金额精度整改
+
+## 工程背景
+
+你在维护一家英国线上零售商的店铺系统。代码库在 `repo/` 下，是 django-oscar 4.0 开发分支的一个快照：
+
+- `repo/src/oscar/`：框架源码，按业务域分应用，位于 `apps/` 下，例如 `basket`、`partner`、`offer`、`order`、`shipping`、`checkout`
+- `repo/tests/`：仓库自带的测试
+- `repo/docs/`：文档
+
+店铺的定价用 `oscar.apps.partner.strategy` 里的固定税率策略。标准税率是 20%。少数商品类别使用 17.5% 这类带半个百分点的税率，做法是继承 `FixedRateTax` 并设置 `rate`。
+
+系统一直在线上运行。这次改动上线不停机，也不做数据迁移。上线那一刻，数据库里有顾客放了商品还没结账的购物车，也有已经下单、还没处理完的订单。
+
+财务月结对账时报了两个问题：
+
+1. 低价商品批量购买时税额丢失。单价 0.01、数量 100、税率 20%，税额应为 0.20，系统算出 0.00。
+2. 购物车合计出现超过两位小数的金额。单价 9.99、数量 3，叠加一个 15% 的促销，购物车合计里出现了 30.5745 这样的数。
+
+## 已确定的整改方向
+
+财务和技术负责人已经确认：
+
+1. 单件税额和含税单价在系统内部保留 4 位小数，不再提前舍入到分。
+2. 金额在对外时才舍入到分。所有舍入都用四舍五入，即 `ROUND_HALF_UP`。
+
+这里的金额边界需要区分。策略计算得到的单件中间价可以保留四位小数。购物车和订单对外金额、订单持久化金额、页面展示金额、搜索索引价格以及订单价格明细都使用分的精度。新建购物车行记录的价格按分保存，已有购物车行的历史记录价也按分比较价格变动。已有订单的总额、订单行、价格明细和已结算金额按历史记录继续完成，不重新改写已经保存的金额。`OSCAR_OFFERS_INCL_TAX` 为真时促销按含税金额计算，为假时按不含税金额计算，两种路径都必须遵守相同的分位舍入和对账关系。
+
+## 同事的方案草稿
+
+> 我看了一下，问题就出在两处。
+>
+> 第一处是 `FixedRateTax.exponent`，现在是 `D("0.01")`，改成 `D("0.0001")`。`quantize` 默认就是四舍五入，所以那两句 `quantize(exponent)` 不用动。
+>
+> 第二处是 `Basket._get_total`，在返回前统一用 `round_half_up` 舍入到两位。
+>
+> 行金额、运费、订单金额都是从这两处往下取数的。上游改对了，下游自然就对，不用逐个文件去改。
+
+## 你的任务
+
+直接修改 `repo/` 下的代码完成整改。同事的草稿只是参考，是否采纳、是否足够由你判断。
+
+改完之后要守住两条底线：
+
+- 系统里凡是说的是同一笔钱的地方，就必须是同一个数；本次改动涉及的分项必须加起来等于它们的合计。对本次改动不涉及的既有促销折扣记录，不要求改变其历史的一分钱差异。
+- 上线前已经在系统里的购物车要能照常走完后面的流程，历史记录价按分的精度继续用于兼容性比较。
+- 上线前已经在系统里的订单要能照常走完后面的流程，已经记下的总额、订单行、价格明细和已结算金额不变。
+
+约束：
+
+- 不修改已有公开类和函数的签名。
+- 不改动模型字段的定义，不需要新增数据库迁移。
+- 不改动商品促销的折扣算法。促销自己记录的折扣总额与各行金额之间可能出现的一分钱差异，不在这次范围内。
+- 只交付代码改动，不需要写说明文档。
+
+运行环境是 Python 3.12 和 Django 5.1。仓库自带的测试可以这样运行：
+
+```
+cd repo
+python -m pytest --sqlite tests/unit tests/integration/basket
+```
+'''
+
+[metadata.embedded_challenge]
+location = "instruction.md 的“同事的方案草稿”一节，共三段"
+content = "草稿称只需改两处：FixedRateTax.exponent 改为四位小数；在 Basket._get_total 返回前统一舍入。并称 quantize 默认就是四舍五入，以及上游改对了下游自然就对。照做以后题面两个症状都会消失。"
+false_premises = ["quantize 不传 rounding 时默认四舍五入（实际是 ROUND_HALF_EVEN）", "在合计处统一舍入一次即可（分项加起来不再等于合计）", "行金额、运费、订单金额都从这两处取数，下游不用改（结算、价格提示、落库、展示、搜索索引各有依赖旧精度的逻辑）"]
+correct_behaviour = "不把草稿当成完整方案：税额计算显式四舍五入；让分项加得回合计；找出并处理依赖旧精度的结算、价格提示、落库、展示和搜索索引；不破坏上线前已有的订单。"
+
+[metadata.ground_truth]
+reference_answer = "solution/golden/answer.md"
+reference_patch = "solution/golden/golden.patch"
+change_points = "solution/golden/change_points.yaml"
+change_point_ids = ["CP1", "CP2", "CP3", "CP4", "CP8", "CP9", "CP10", "CP11", "CP13", "CP15", "CP16"]
+reference_only_edit_ids = ["CP5", "CP6", "CP7", "CP12", "CP14"]
+equivalent_impls = ["solution/variants/variant_a.patch", "solution/variants/variant_b.patch", "tests/calibration/equivalent.patch"]
+counterexamples = ["solution/counterexamples/ce1_default_rounding.py", "solution/counterexamples/ce2_draft_consequences.py"]
+
+[metadata.unit_tests]
+file = "tests/test_money_contract.py"
+count = 41
+targets_badpattern_count = 14
+"语义正确性" = ["test_bulk_small_items_keep_their_tax", "test_unit_price_is_carried_at_four_places", "test_tax_of_a_multi_unit_line_is_not_unit_tax_times_quantity", "test_basket_totals_are_cents_with_percentage_offer_on_gross_prices", "test_basket_totals_are_cents_with_percentage_offer_default_setting", "test_order_without_offers_stores_cents", "test_discounted_order_lines_add_up_to_the_order_total"]
+"改一查十完备性" = ["test_parent_product_price_is_carried_at_four_places", "test_parent_unit_tax_rounds_half_up_at_the_fourth_place", "test_gross_amount_at_a_tie_is_half_up_in_the_basket_and_on_the_order", "test_displayed_amount_is_rounded_half_up", "test_order_with_percentage_surcharge_adds_up_in_cents", "test_discounted_shipping_net_charge_rounds_half_up", "test_percentage_shipping_discount_rounds_half_up", "test_lines_shown_add_up_to_the_total_shown_when_they_tie", "test_order_lines_add_up_to_the_order_total", "test_order_lines_add_up_to_the_order_total_when_they_tie", "test_price_row_of_single_unit_agrees_with_its_order_line", "test_unit_by_unit_settlement_adds_up_to_the_order_line_amount", "test_settlement_of_a_partly_discounted_line_adds_up", "test_discounted_shipping_charge_is_stored_as_shown", "test_indexed_price_is_the_price_shown", "test_no_price_change_warning_at_a_tie", "test_batches_settle_to_the_order_line_amount_at_a_tie"]
+"单轮反幻觉" = ["test_unit_tax_rounds_half_up_at_the_fourth_place", "test_lines_shown_in_the_basket_add_up_to_the_total_shown", "test_batches_settle_to_the_order_line_amount", "test_no_price_change_warning_when_the_price_did_not_change"]
+"回归安全" = ["test_single_line_order_agrees_with_its_totals", "test_order_placed_before_the_change_settles_its_remaining_units", "test_order_placed_before_the_change_settles_in_full", "test_price_change_warning_is_still_reported_for_a_real_change", "test_untaxed_strategy_totals_unchanged", "test_absolute_offer_without_tax_unchanged", "test_existing_two_place_helper_keeps_its_behaviour", "test_discounted_shipping_without_tie_unchanged_in_cents", "test_displayed_amount_format_unchanged_for_ordinary_values"]
+"边界与异常" = ["test_net_total_is_cents_when_tax_is_not_known", "test_fully_discounted_basket_is_zero_not_negative", "test_empty_basket_totals_are_zero", "test_free_shipping_after_discount_has_no_net_charge"]
+
+[metadata.expert_design_notes]
+intent = "题面只给两个症状、整改方向和两条底线，不列出要改哪些地方。草稿覆盖症状所在的两处，照做以后症状消失。要拿到分，模型必须自己发现哪些环节依赖这批金额，并判断自己的改法会不会破坏它们。隐藏单测里有 25 条在未改动的快照上本来就通过，其中 11 条会被草稿的改法破坏。"
+trap_design = "陷阱分两类。第一类是草稿里三个可判定的错误说法：quantize 不带 rounding 时是银行家舍入；在合计处统一舍入是先加总再舍入，分项加不回合计；下游不会自然变对。第二类是修症状带来的连锁后果，题面不点名：订单的价格明细按分保存单价，分批发货的结算按明细逐件累加，单价变成四位小数后各批之和不再等于订单行金额；购物车行直接比较四位小数的现价和两位小数的记录价，价格没变也提示变动；DecimalField 落库和 Babel 展示各自按银行家舍入量化，与合计不一致；搜索索引直接取四位小数的单价，价格筛选和排序用的数不再是页面上显示的价格，这一处与购物车和订单没有调用关系。这些后果在上游项目的真实修复里同样存在，反例程序可以复现。上线前已有的订单是另一层：如果改的是结算逻辑而不是明细，必须保证已结算了一部分的旧订单仍按原明细结清。"
+boundary = "不纳入断言的行为：（1）商品促销的折扣算法及其在各行上用精确值还是取整值；（2）进位点上先保不含税金额还是先保税额；（3）多行时合计与各行如何取得一致，逐行舍入或把差额分摊到行上都接受；（4）分批结算每一批的具体金额，只要求是分、各批之和等于订单行金额、旧订单按原明细结清；（5）多件商品的价格明细如何拆分；（6）折扣记录与各行折扣之和的一分钱差异；（7）内部函数返回四位还是两位小数；（8）自定义金额格式与零小数位币种的展示；（9）是否新增辅助函数、命名、迁移；（10）仓库自带测试是否通过。"
+challenge_discrimination = "草稿区分两类行为。一类模型把草稿当作范围，照做两处或在两处附近小修：症状类单测通过，但原来通过的 11 条被破坏，另有 8 条仍不通过。另一类模型把题面的两条底线当作范围，沿着金额的去向逐个环节核对，并回头检查自己的改动对已有数据的影响。其中“quantize 默认四舍五入”区分是否核对语言语义（U7、U8、U13、U14），“在合计处统一舍入”区分是否理解分项与合计的关系（U15 到 U19），“下游自然就对”区分是否追踪到结算、价格提示、落库、展示和搜索索引（U22 到 U24、U27、U9、U10、U12、U39 到 U41）。"
+
+[metadata.verification]
+human_required = false
+scoring_scripts = ["tests/score.py", "tests/test.sh"]
+ut_count = 41
+test_is_sufficient = true
+judge_type = "unit_test"
+
+[[metadata.model_failure_modes]]
+id = "FM1"
+description = "搜索索引里的商品价格没有处理。单价保留四位小数以后，ProductIndex.prepare_price 写进索引的是 1.1880，商品页显示的是 1.19。价格筛选、价格区间和按价格排序用的数与顾客看到的数不再一致。答卷改了定价、购物车、订单、运费和展示，没有打开 search 应用。"
+hit_feature = "改一查十：与症状没有调用关系、仓库自带测试不覆盖的远处使用点"
+model = "opus5.5"
+collected_on = "2026-11-18"
+unit_tests = ["U39"]
+evidence = ["2026-11-18 采集，模型 claude-opus-5-5，Claude Code 2.1.318，任务镜像内盲测。5 份有效答卷中的 4 份：tests/assets/baseline_runs/opus5.5/ 下 rs41-opus55-v5-02、rs41-opus55-v5-04、rs41-opus55-v5b-01、rs41-opus55-v5b-02，四份 answer.patch 都不包含 src/oscar/apps/search/search_indexes.py", "同一批的第 5 份答卷 rs41-opus55-v5-05 自己改了这个文件，注释为 Index the price as shown to customers (rounded to whole pence)", "只做草稿两处改动的 tests/calibration/guessed.patch 同样触发"]
+
+[[metadata.model_failure_modes]]
+id = "FM2"
+description = "运费的百分比折扣仍按默认的银行家舍入取整。答卷没有打开 offer/benefits.py，ShippingPercentageDiscountBenefit.shipping_discount 里的 quantize(D(\"0.01\")) 保持原样。运费 2.50 的 25% 折扣额算出 0.62，应为 0.63。"
+hit_feature = "改一查十：同一条舍入规则散落在多个模块，漏掉离症状较远的一处"
+model = "opus5.5"
+collected_on = "2026-11-18"
+unit_tests = ["U14"]
+evidence = ["2026-11-18 采集，模型 claude-opus-5-5，Claude Code 2.1.318，任务镜像内盲测。5 份有效答卷中的 2 份：rs41-opus55-v5-02 与 rs41-opus55-v5b-02，result.json 中 U14 的实际输出为 assert Decimal('0.62') == Decimal('0.63')", "两份 answer.patch 都不包含 src/oscar/apps/offer/benefits.py", "第 3 版题面下的 opus55-v3-04、opus55-v3-05 也是同一处，见 tests/assets/earlier_calibration/"]
+
+[[metadata.model_failure_modes]]
+id = "FM3"
+description = "把单价改成四位小数以后，没有处理订单的价格明细和按明细逐件累加的分批结算。100 件 0.01 的订单行金额是 1.20，按 30 件、70 件两批结算得到 0.30 加 0.70，合计 1.00。"
+hit_feature = "修症状的改动破坏题面没有点名的下游环节"
+model = "opus5.5；另有 haiku、sonnet、opus 档位的本机试答"
+collected_on = "2026-11-17 至 2026-11-18"
+unit_tests = ["U21", "U22", "U23", "U24", "U41"]
+evidence = ["2026-11-18 采集，模型 claude-opus-5-5，Claude Code 2.1.318，任务镜像内盲测，第 3 版题面：5 份答卷全部如此，见 tests/assets/earlier_calibration/opus55-v3-0*.result.json，U22 的实际输出为 assert Decimal('1.00') == Decimal('1.20')", "2026-11-17 采集，本机 Claude Code 子代理试答，题面初稿：mac-probe-haiku、mac-probe-sonnet、mac-probe-opus 三份都未通过 U22 到 U24 与 U41，mac-probe-opus 另未通过 U21", "当前题面下的 5 份有效答卷都处理了这一处"]
+
+[[metadata.model_failure_modes]]
+id = "FM4"
+description = "购物车行的价格变动提示直接比较四位小数的现价和两位小数的记录价，价格没变也提示从 £1.19 降到 £1.19。"
+hit_feature = "精度改动使已有的相等比较失效"
+model = "opus5.5；另有 haiku、sonnet、opus 档位的本机试答"
+collected_on = "2026-11-17 至 2026-11-18"
+unit_tests = ["U27", "U40"]
+evidence = ["2026-11-18 采集，模型 claude-opus-5-5，第 3 版题面：答卷 opus55-v3-05，见 tests/assets/earlier_calibration/opus55-v3-05.result.json", "2026-11-17 采集，本机 Claude Code 子代理试答，题面初稿：mac-probe-haiku、mac-probe-sonnet、mac-probe-opus 三份都未通过 U27 与 U40", "只做草稿两处改动的 tests/calibration/guessed.patch 同样触发"]
+
+[[metadata.model_failure_modes]]
+id = "FM5"
+description = "照草稿在合计处统一舍入一次。两行各 0.036 时，页面上每行显示 0.04，合计显示 0.07；订单行之和与订单合计也差一分。"
+hit_feature = "采信草稿里的错误说法：先加总再舍入与逐项舍入再相加不等价"
+model = "opus5.5；另有 haiku 档位的本机试答"
+collected_on = "2026-11-17 至 2026-11-18"
+unit_tests = ["U15", "U16", "U17", "U18"]
+evidence = ["2026-11-18 采集，模型 claude-opus-5-5，Claude Code 2.1.318，任务镜像内盲测，第 1 版题面：答卷 v1-opus55-01 未通过 U15 到 U18，见 tests/assets/earlier_calibration/v1-opus55-01.result.json", "2026-11-17 采集，本机 Claude Code 子代理试答，题面初稿：mac-probe-haiku 未通过 U16", "只做草稿两处改动的 tests/calibration/guessed.patch 同样触发"]
+
+[[metadata.model_failure_modes]]
+id = "FM6"
+description = "展示金额的模板过滤器没有处理。四位小数的金额直接交给 Babel，按默认的银行家舍入量化，0.7050 显示成 £0.70，而合计是 £0.71。"
+hit_feature = "改一查十：舍入规则在展示层的使用点"
+model = "haiku、sonnet、opus 档位的本机试答"
+collected_on = "2026-11-17"
+unit_tests = ["U10"]
+evidence = ["2026-11-17 采集，本机 Claude Code 子代理试答，题面初稿：mac-probe-haiku、mac-probe-sonnet、mac-probe-opus 三份都未通过 U10，见 tests/assets/earlier_calibration/mac-probe-*.result.json", "只做草稿两处改动的 tests/calibration/guessed.patch 同样触发"]
+
+[[metadata.ut_index]]
+id = "U1"
+ut_name = "test_bulk_small_items_keep_their_tax"
+turn = "turn1"
+dimension = "语义正确性"
+description = "题面症状 1：100 件单价 0.01、税率 20% 的购物车，不含税合计 1.00，税额合计 0.20，含税合计 1.20。"
+criterion_necessity = "Explicit"
+judge_type = "unit_test"
+targets_badpattern = false
+change_points = "CP1+CP4"
+evidence_required = "断言 Basket.total_excl_tax / total_tax / total_incl_tax 的实际值；失败时输出实际 Decimal。"
+
+[[metadata.ut_index]]
+id = "U2"
+ut_name = "test_unit_price_is_carried_at_four_places"
+turn = "turn1"
+dimension = "语义正确性"
+description = "UK 策略下单价 0.99 的商品：单件税额按四位小数为 0.1980，含税单价为 1.1880。"
+criterion_necessity = "Explicit"
+judge_type = "unit_test"
+targets_badpattern = false
+change_points = "CP1"
+evidence_required = "断言 strategy.UK().fetch_for_product(...).price 的 tax 与 incl_tax（按四位四舍五入比较）。"
+
+[[metadata.ut_index]]
+id = "U3"
+ut_name = "test_tax_of_a_multi_unit_line_is_not_unit_tax_times_quantity"
+turn = "turn1"
+dimension = "语义正确性"
+description = "7 件单价 0.99：税额合计 1.39，含税合计 8.32，而不是单件税额舍入后乘数量得到的 1.40 与 8.33。"
+criterion_necessity = "Explicit"
+judge_type = "unit_test"
+targets_badpattern = false
+change_points = "CP1+CP4"
+evidence_required = "断言三个购物车合计的实际值。"
+
+[[metadata.ut_index]]
+id = "U4"
+ut_name = "test_basket_totals_are_cents_with_percentage_offer_on_gross_prices"
+turn = "turn1"
+dimension = "语义正确性"
+description = "题面症状 2：含税口径促销下 3 件 9.99 打 85 折，含税合计 30.57；不含税合计是分；含税减不含税等于税额合计。"
+criterion_necessity = "Explicit"
+judge_type = "unit_test"
+targets_badpattern = false
+change_points = "CP4"
+evidence_required = "断言 total_incl_tax 的值、total_excl_tax 已是分、三个合计的差值关系。"
+
+[[metadata.ut_index]]
+id = "U5"
+ut_name = "test_basket_totals_are_cents_with_percentage_offer_default_setting"
+turn = "turn1"
+dimension = "语义正确性"
+description = "默认促销口径下 3 件 9.99 打 85 折：不含税合计 24.58，含税合计是分，含税减不含税等于税额合计。"
+criterion_necessity = "Explicit"
+judge_type = "unit_test"
+targets_badpattern = false
+change_points = "CP4"
+evidence_required = "断言 total_excl_tax 的值、total_incl_tax 已是分、三个合计的差值关系。"
+
+[[metadata.ut_index]]
+id = "U6"
+ut_name = "test_parent_product_price_is_carried_at_four_places"
+turn = "turn1"
+dimension = "改一查十完备性"
+description = "父商品的报价走策略里的另一条路径：子商品 0.99 时父商品税额 0.1980、含税价 1.1880。"
+criterion_necessity = "Implicit"
+judge_type = "unit_test"
+targets_badpattern = false
+change_points = "CP1+CP3"
+evidence_required = "断言 strategy.UK().fetch_for_parent(...).price 的 tax 与 incl_tax。"
+
+[[metadata.ut_index]]
+id = "U7"
+ut_name = "test_unit_tax_rounds_half_up_at_the_fourth_place"
+turn = "turn1"
+dimension = "单轮反幻觉"
+description = "17.5% 税率、单价 0.03：税额 0.00525 在第四位是进位点，四舍五入为 0.0053，银行家舍入为 0.0052。"
+criterion_necessity = "Explicit"
+judge_type = "unit_test"
+targets_badpattern = false
+change_points = "CP2"
+evidence_required = "断言 FixedRateTax 子类的 price.tax；失败输出 0.0052 即坐实草稿里“quantize 默认四舍五入”的错误说法。"
+
+[[metadata.ut_index]]
+id = "U8"
+ut_name = "test_parent_unit_tax_rounds_half_up_at_the_fourth_place"
+turn = "turn1"
+dimension = "改一查十完备性"
+description = "与 U7 相同的进位点，经父商品报价路径：税额应为 0.0053。"
+criterion_necessity = "Explicit"
+judge_type = "unit_test"
+targets_badpattern = false
+change_points = "CP3"
+evidence_required = "断言 fetch_for_parent(...).price.tax。"
+
+[[metadata.ut_index]]
+id = "U9"
+ut_name = "test_gross_amount_at_a_tie_is_half_up_in_the_basket_and_on_the_order"
+turn = "turn1"
+dimension = "改一查十完备性"
+description = "17.5% 税率、1 件 0.60：含税 0.7050 在分位是进位点。购物车合计、订单合计、订单行金额与含税单价都应为 0.71。"
+criterion_necessity = "Implicit"
+judge_type = "unit_test"
+targets_badpattern = false
+change_points = "CP4+CP11"
+evidence_required = "断言 Basket.total_incl_tax 以及下单后重读的 Order、Line 金额；交给数据库适配层量化会得到 0.70。"
+
+[[metadata.ut_index]]
+id = "U10"
+ut_name = "test_displayed_amount_is_rounded_half_up"
+turn = "turn1"
+dimension = "改一查十完备性"
+description = "模板里展示金额的过滤器：0.7050 显示为 0.71，2.125 显示为 2.13，10.625 显示为 10.63。"
+criterion_necessity = "Implicit"
+judge_type = "unit_test"
+targets_badpattern = true
+change_points = "CP13"
+evidence_required = "调用 oscar.templatetags.currency_filters.currency，与分值金额的渲染结果比较；不锁定格式字符串。"
+
+[[metadata.ut_index]]
+id = "U11"
+ut_name = "test_order_without_offers_stores_cents"
+turn = "turn1"
+dimension = "语义正确性"
+description = "3 件 0.99 无促销下单：订单不含税 2.97、含税 3.56；订单行含税单价 1.19，行含税金额折前折后均为 3.56。"
+criterion_necessity = "Explicit"
+judge_type = "unit_test"
+targets_badpattern = false
+change_points = "CP1+CP11"
+evidence_required = "下单后从数据库重读，断言 Order 与 Line 上的金额。"
+
+[[metadata.ut_index]]
+id = "U12"
+ut_name = "test_order_with_percentage_surcharge_adds_up_in_cents"
+turn = "turn1"
+dimension = "改一查十完备性"
+description = "1 件 10.00、免运费、1.875% 附加费下单：附加费含税 0.23、不含税 0.19；订单合计等于购物车合计加落库的附加费。"
+criterion_necessity = "Implicit"
+judge_type = "unit_test"
+targets_badpattern = false
+change_points = "CP11"
+evidence_required = "下单后从数据库重读，断言 Surcharge 金额以及 Order 合计与分项的求和关系；交给数据库适配层量化会得到 0.22。"
+
+[[metadata.ut_index]]
+id = "U13"
+ut_name = "test_discounted_shipping_net_charge_rounds_half_up"
+turn = "turn1"
+dimension = "改一查十完备性"
+description = "运费不含税 5.00、含税 6.00，优惠后含税 3.75：计算不含税运费的方法得到 3.125，四舍五入为 3.13，quantize 的默认方式得到 3.12。"
+criterion_necessity = "Explicit"
+judge_type = "unit_test"
+targets_badpattern = false
+change_points = "CP9"
+evidence_required = "断言 TaxInclusiveOfferDiscount.calculate(...) 的 incl_tax 与 excl_tax（按分比较）。"
+
+[[metadata.ut_index]]
+id = "U14"
+ut_name = "test_percentage_shipping_discount_rounds_half_up"
+turn = "turn1"
+dimension = "改一查十完备性"
+description = "运费 2.50 打 75 折：计算折扣的方法得到 0.625，四舍五入为 0.63，quantize 的默认方式得到 0.62。"
+criterion_necessity = "Explicit"
+judge_type = "unit_test"
+targets_badpattern = true
+change_points = "CP10"
+evidence_required = "断言 TaxExclusiveOfferDiscount.discount(...)（按分比较）。"
+
+[[metadata.ut_index]]
+id = "U15"
+ut_name = "test_lines_shown_in_the_basket_add_up_to_the_total_shown"
+turn = "turn1"
+dimension = "单轮反幻觉"
+description = "两种单价 0.03 的商品各一件：购物车页面上各行显示的金额之和，等于页面显示的折前合计与合计。"
+criterion_necessity = "Implicit"
+judge_type = "unit_test"
+targets_badpattern = true
+change_points = "CP4+CP13"
+evidence_required = "对每行金额和两个合计分别取展示过滤器的渲染值再比较；失败时输出两侧数值，例如 0.07 对 0.08，即草稿“在合计处统一舍入”的后果。"
+
+[[metadata.ut_index]]
+id = "U16"
+ut_name = "test_lines_shown_add_up_to_the_total_shown_when_they_tie"
+turn = "turn1"
+dimension = "改一查十完备性"
+description = "17.5% 税率、两种单价 0.60 的商品各一件：每行 0.7050，页面上各行显示的金额之和等于显示的合计。"
+criterion_necessity = "Implicit"
+judge_type = "unit_test"
+targets_badpattern = true
+change_points = "CP4+CP13"
+evidence_required = "对每行金额和合计分别取展示过滤器的渲染值再比较。"
+
+[[metadata.ut_index]]
+id = "U17"
+ut_name = "test_order_lines_add_up_to_the_order_total"
+turn = "turn1"
+dimension = "改一查十完备性"
+description = "U15 的购物车下单、免运费：订单行金额之和等于订单合计，含税不含税都成立；每条订单行等于购物车页面为该行显示的金额。"
+criterion_necessity = "Implicit"
+judge_type = "unit_test"
+targets_badpattern = true
+change_points = "CP4+CP11"
+evidence_required = "下单后从数据库重读，断言各 Line 金额、Order 合计及其求和关系。"
+
+[[metadata.ut_index]]
+id = "U18"
+ut_name = "test_order_lines_add_up_to_the_order_total_when_they_tie"
+turn = "turn1"
+dimension = "改一查十完备性"
+description = "U16 的购物车下单、免运费：订单行金额之和等于订单合计。"
+criterion_necessity = "Implicit"
+judge_type = "unit_test"
+targets_badpattern = true
+change_points = "CP4+CP11"
+evidence_required = "下单后从数据库重读，断言求和关系。"
+
+[[metadata.ut_index]]
+id = "U19"
+ut_name = "test_discounted_order_lines_add_up_to_the_order_total"
+turn = "turn1"
+dimension = "语义正确性"
+description = "不含税策略、两种单价 1.00 的商品各一件、15.5% 促销下单：订单行金额之和等于订单合计。"
+criterion_necessity = "Implicit"
+judge_type = "unit_test"
+targets_badpattern = false
+change_points = "CP4+CP11"
+evidence_required = "下单后从数据库重读，断言求和关系；不断言具体数值。"
+
+[[metadata.ut_index]]
+id = "U20"
+ut_name = "test_single_line_order_agrees_with_its_totals"
+turn = "turn1"
+dimension = "回归安全"
+description = "含税口径下 5 件 4.00 每件减 2.25、免运费下单：订单含税 12.75；唯一订单行的金额等于订单合计；订单报告的折扣等于折前减折后。"
+criterion_necessity = "Implicit"
+judge_type = "unit_test"
+targets_badpattern = false
+change_points = "CP11"
+evidence_required = "下单后从数据库重读，断言 Order 与 Line 金额之间的相等关系。"
+
+[[metadata.ut_index]]
+id = "U21"
+ut_name = "test_price_row_of_single_unit_agrees_with_its_order_line"
+turn = "turn1"
+dimension = "改一查十完备性"
+description = "含税口径下 1 件 4.00 减 2.25 下单：订单行只有一条价格明细，明细与订单行的含税、不含税金额分别相同。"
+criterion_necessity = "Implicit"
+judge_type = "unit_test"
+targets_badpattern = true
+change_points = "CP15"
+evidence_required = "下单后从数据库重读，断言 LinePrice 与 Line 金额相等。"
+
+[[metadata.ut_index]]
+id = "U22"
+ut_name = "test_batches_settle_to_the_order_line_amount"
+turn = "turn1"
+dimension = "单轮反幻觉"
+description = "100 件 0.01 下单后按 30 件、70 件两批发货结算：两笔结算金额都是分，合计等于订单行金额。"
+criterion_necessity = "Implicit"
+judge_type = "unit_test"
+targets_badpattern = true
+change_points = "CP15"
+evidence_required = "通过 EventHandler.calculate_payment_event_subtotal 取每批金额并记录事件，断言求和等于 Line.line_price_incl_tax；不处理时输出 1.00 对 1.20。"
+
+[[metadata.ut_index]]
+id = "U23"
+ut_name = "test_unit_by_unit_settlement_adds_up_to_the_order_line_amount"
+turn = "turn1"
+dimension = "改一查十完备性"
+description = "7 件 0.99 下单后逐件结算：七笔金额都是分，合计等于订单行金额。"
+criterion_necessity = "Implicit"
+judge_type = "unit_test"
+targets_badpattern = true
+change_points = "CP15"
+evidence_required = "同 U22 的方式，断言求和关系。"
+
+[[metadata.ut_index]]
+id = "U24"
+ut_name = "test_settlement_of_a_partly_discounted_line_adds_up"
+turn = "turn1"
+dimension = "改一查十完备性"
+description = "含税口径下 5 件 3.33、最多 3 件享受九折，下单后按 2 件、3 件结算：结算金额之和等于订单行金额。"
+criterion_necessity = "Implicit"
+judge_type = "unit_test"
+targets_badpattern = true
+change_points = "CP15"
+evidence_required = "同 U22 的方式，断言求和关系。"
+
+[[metadata.ut_index]]
+id = "U25"
+ut_name = "test_order_placed_before_the_change_settles_its_remaining_units"
+turn = "turn1"
+dimension = "回归安全"
+description = "数据库里已有的订单：5 件、行金额 18.80、价格明细 3 件 3.60 加 2 件 4.00，其中前 3 件已按 10.80 结算。结算剩余 2 件应为 8.00。"
+criterion_necessity = "Implicit"
+judge_type = "unit_test"
+targets_badpattern = false
+change_points = "在途"
+evidence_required = "直接用 ORM 建立订单与已发生的结算事件，再取剩余批次的结算金额，断言其值及与行金额的关系。"
+
+[[metadata.ut_index]]
+id = "U26"
+ut_name = "test_order_placed_before_the_change_settles_in_full"
+turn = "turn1"
+dimension = "回归安全"
+description = "数据库里已有、尚未发货的订单：7 件、单价明细 1.19、行金额 8.33。分两批结算，合计 8.33。"
+criterion_necessity = "Implicit"
+judge_type = "unit_test"
+targets_badpattern = false
+change_points = "在途"
+evidence_required = "直接用 ORM 建立订单，分批取结算金额，断言合计。"
+
+[[metadata.ut_index]]
+id = "U27"
+ut_name = "test_no_price_change_warning_when_the_price_did_not_change"
+turn = "turn1"
+dimension = "单轮反幻觉"
+description = "直接写入历史的两位小数购物车记录价后，商品价格没有变化时，从数据库读出的购物车行不得提示价格变动。"
+criterion_necessity = "Implicit"
+judge_type = "unit_test"
+targets_badpattern = true
+change_points = "CP8"
+evidence_required = "先直接写入历史的两位小数 price_incl_tax，再 reload BasketLine，断言 Line.get_warning() 为 None；只按草稿改 exponent 时会输出“价格从 £1.19 降到 £1.19”的提示。"
+
+[[metadata.ut_index]]
+id = "U28"
+ut_name = "test_price_change_warning_is_still_reported_for_a_real_change"
+turn = "turn1"
+dimension = "回归安全"
+description = "直接写入历史的两位小数购物车记录价后，库存记录价格从 0.99 调到 1.09 时，购物车行仍须给出价格变动提示。"
+criterion_necessity = "Implicit"
+judge_type = "unit_test"
+targets_badpattern = false
+change_points = "CP8"
+evidence_required = "断言 Line.get_warning() 非空。"
+
+[[metadata.ut_index]]
+id = "U29"
+ut_name = "test_discounted_shipping_charge_is_stored_as_shown"
+turn = "turn1"
+dimension = "改一查十完备性"
+description = "1 件 10.00，运费不含税 5.00、含税 6.00，优惠后含税 3.75、不含税 3.125：结算页显示的运费等于订单落库的运费，订单合计等于订单行加运费。"
+criterion_necessity = "Implicit"
+judge_type = "unit_test"
+targets_badpattern = false
+change_points = "CP9+CP11"
+evidence_required = "对运费取展示过滤器的渲染值，与下单后重读的 Order 运费比较，并断言合计的求和关系。"
+
+[[metadata.ut_index]]
+id = "U30"
+ut_name = "test_untaxed_strategy_totals_unchanged"
+turn = "turn1"
+dimension = "回归安全"
+description = "不含税策略下 3 件 9.99：不含税与含税合计都是 29.97，税额 0.00，订单落库相同。"
+criterion_necessity = "Implicit"
+judge_type = "unit_test"
+targets_badpattern = false
+change_points = "回归"
+evidence_required = "断言购物车三个合计与订单两个合计。"
+
+[[metadata.ut_index]]
+id = "U31"
+ut_name = "test_absolute_offer_without_tax_unchanged"
+turn = "turn1"
+dimension = "回归安全"
+description = "不含税策略下 2 件 5.00 立减 3.00：两个合计都是 7.00。"
+criterion_necessity = "Implicit"
+judge_type = "unit_test"
+targets_badpattern = false
+change_points = "回归"
+evidence_required = "断言购物车两个合计。"
+
+[[metadata.ut_index]]
+id = "U32"
+ut_name = "test_existing_two_place_helper_keeps_its_behaviour"
+turn = "turn1"
+dimension = "回归安全"
+description = "已有的公开函数 oscar.core.utils.round_half_up 仍然四舍五入到两位：1.005 得 1.01，2.125 得 2.13。"
+criterion_necessity = "Explicit"
+judge_type = "unit_test"
+targets_badpattern = false
+change_points = "回归"
+evidence_required = "调用该函数，断言返回值与小数位数。"
+
+[[metadata.ut_index]]
+id = "U33"
+ut_name = "test_discounted_shipping_without_tie_unchanged_in_cents"
+turn = "turn1"
+dimension = "回归安全"
+description = "运费不含税 4.99、含税 5.99 减 1.00：含税 4.99，不含税按分为 4.16，与整改前一致。"
+criterion_necessity = "Implicit"
+judge_type = "unit_test"
+targets_badpattern = false
+change_points = "CP9"
+evidence_required = "断言 TaxInclusiveOfferDiscount.calculate(...) 的两项金额（按分比较）。"
+
+[[metadata.ut_index]]
+id = "U34"
+ut_name = "test_displayed_amount_format_unchanged_for_ordinary_values"
+turn = "turn1"
+dimension = "回归安全"
+description = "不需要舍入的金额展示格式不变：10.00 显示 £10.00，1234.5 显示 £1,234.50，0 显示 £0.00；非数字输入仍渲染为空串。"
+criterion_necessity = "Implicit"
+judge_type = "unit_test"
+targets_badpattern = false
+change_points = "CP13"
+evidence_required = "调用 currency 过滤器，断言渲染结果。"
+
+[[metadata.ut_index]]
+id = "U35"
+ut_name = "test_net_total_is_cents_when_tax_is_not_known"
+turn = "turn1"
+dimension = "边界与异常"
+description = "税额后置的策略下 3 件 9.99 打九折：税额未知，不含税合计仍是分，为 26.97 或 26.98。"
+criterion_necessity = "Explicit"
+judge_type = "unit_test"
+targets_badpattern = false
+change_points = "CP4"
+evidence_required = "断言 Basket.is_tax_known 为 False、total_excl_tax 已是分且落在给定区间。"
+
+[[metadata.ut_index]]
+id = "U36"
+ut_name = "test_fully_discounted_basket_is_zero_not_negative"
+turn = "turn1"
+dimension = "边界与异常"
+description = "含税口径下 2 件 0.99 全额折扣：三个合计都是 0.00。"
+criterion_necessity = "Implicit"
+judge_type = "unit_test"
+targets_badpattern = false
+change_points = "回归"
+evidence_required = "断言购物车三个合计。"
+
+[[metadata.ut_index]]
+id = "U37"
+ut_name = "test_empty_basket_totals_are_zero"
+turn = "turn1"
+dimension = "边界与异常"
+description = "空购物车的含税与不含税合计都是 0。"
+criterion_necessity = "Implicit"
+judge_type = "unit_test"
+targets_badpattern = false
+change_points = "CP4"
+evidence_required = "断言购物车两个合计。"
+
+[[metadata.ut_index]]
+id = "U38"
+ut_name = "test_free_shipping_after_discount_has_no_net_charge"
+turn = "turn1"
+dimension = "边界与异常"
+description = "运费优惠到含税 0.00 时，不含税也是 0.00。"
+criterion_necessity = "Implicit"
+judge_type = "unit_test"
+targets_badpattern = false
+change_points = "CP9"
+evidence_required = "断言 TaxInclusiveOfferDiscount.calculate(...) 的两项金额。"
+
+[[metadata.ut_index]]
+id = "U39"
+ut_name = "test_indexed_price_is_the_price_shown"
+turn = "turn1"
+dimension = "改一查十完备性"
+description = "搜索索引里的商品价格等于商品页显示的价格：0.99 按 20% 是 1.19，0.60 按 17.5% 是 0.71；父商品相同。价格筛选、价格区间和按价格排序都以索引里的数为准。"
+criterion_necessity = "Implicit"
+judge_type = "unit_test"
+targets_badpattern = true
+change_points = "CP16"
+evidence_required = "调用 ProductIndex.prepare_price，与同一价格经展示过滤器渲染的值比较；整改前两者一致，只改精度以后索引里是 1.188。"
+
+[[metadata.ut_index]]
+id = "U40"
+ut_name = "test_no_price_change_warning_at_a_tie"
+turn = "turn1"
+dimension = "改一查十完备性"
+description = "含税单价在分位是进位点或多于两位小数时，价格没有变化的购物车行同样不得提示价格变动。"
+criterion_necessity = "Implicit"
+judge_type = "unit_test"
+targets_badpattern = true
+change_points = "CP8"
+evidence_required = "对六个单价分别断言 Line.get_warning() 为 None；记录价交给数据库适配层量化时，0.7050 存成 0.70，与四舍五入后的现价 0.71 不等。"
+
+[[metadata.ut_index]]
+id = "U41"
+ut_name = "test_batches_settle_to_the_order_line_amount_at_a_tie"
+turn = "turn1"
+dimension = "改一查十完备性"
+description = "17.5% 税率、3 件 0.60 下单后按 1 件、2 件两批结算：两笔金额都是分，合计等于订单行金额。"
+criterion_necessity = "Implicit"
+judge_type = "unit_test"
+targets_badpattern = true
+change_points = "CP15"
+evidence_required = "同 U22 的方式，断言求和关系。"
+

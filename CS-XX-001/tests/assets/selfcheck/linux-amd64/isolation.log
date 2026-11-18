@@ -1,0 +1,21 @@
+image: cs-xx-001:1.0.0
+  files named like hidden material: 0
+  /tests or /solution present: 0
+  files under /workspace containing identifiers of the reference fix or of the tests: 0
+  entries directly under /workspace: repo 
+image: cs-xx-001-agent:claude-2.1.318
+  files named like hidden material: 0
+  /tests or /solution present: 0
+  files under /workspace containing identifiers of the reference fix or of the tests: 0
+  entries directly under /workspace: repo 
+instruction.md, occurrences of trap names:
+  银行家: 0
+  HALF_EVEN: 0
+  get_warning: 0
+  价格变动: 0
+  currency_filters: 0
+  Babel: 0
+  DecimalField: 0
+  先加总: 0
+  逐行: 0
+  to_cents: 0

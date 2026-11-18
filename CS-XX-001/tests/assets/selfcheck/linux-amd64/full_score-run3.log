@@ -1,0 +1,8 @@
+case: full_score run: 3 container: fresh from cs-xx-001:1.0.0
+tree before: 0 changed files, HEAD tree bdea6eaad6894e6167d11d03ae43019d10127467
+patch tests/calibration/full_score.patch exit: 0
+tree when scored: 10 changed files, working tree 5961fa6a5616552f32d3065c0f4d28d46027ca76
+command: docker exec -u root <container> sh /tests/test.sh
+test.sh exit: 0
+reward: 1
+--- score.stderr (tail)

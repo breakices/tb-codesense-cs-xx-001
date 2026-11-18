@@ -1,0 +1,8 @@
+case: nop run: 1 container: fresh from cs-xx-001:1.0.0
+tree before: 0 changed files, HEAD tree bdea6eaad6894e6167d11d03ae43019d10127467
+no patch applied
+tree when scored: 0 changed files, working tree bdea6eaad6894e6167d11d03ae43019d10127467
+command: docker exec -u root <container> sh /tests/test.sh
+test.sh exit: 0
+reward: 0
+--- score.stderr (tail)

@@ -1,0 +1,161 @@
+# Change points of the reference fix for CS-XX-001.
+# Line numbers refer to the files after solution/golden/golden.patch has been applied to the snapshot.
+task: CS-XX-001
+reference_patch: solution/golden/golden.patch
+reference_answer: solution/golden/answer.md
+snapshot: django-oscar 4dc248a6382cbc26d95644925467e143fa6debcf
+# Only the required entries are guarded by the hidden-test contract. The
+# reference-only entries document implementation choices retained by Golden.
+required_change_point_ids: [CP1, CP2, CP3, CP4, CP8, CP9, CP10, CP11, CP13, CP15, CP16]
+reference_only_edit_ids: [CP5, CP6, CP7, CP12, CP14]
+change_points:
+  - id: CP1
+    file: "src/oscar/apps/partner/strategy.py"
+    symbol: "FixedRateTax.exponent"
+    lines: [282]
+    answer_section: "answer.md 第 2 节 CP1"
+    change: "单件税额的保留位数由两位改为四位。"
+    why: "按两位保留时 0.01 x 20% = 0.002 被舍成 0.00，税额在单件层面就丢失了；含税单价也因此带着舍入误差被数量放大。"
+    required: true
+    unit_tests: [U1, U2, U3, U6, U11]
+  - id: CP2
+    file: "src/oscar/apps/partner/strategy.py"
+    symbol: "FixedRateTax.pricing_policy"
+    lines: [289]
+    answer_section: "answer.md 第 2 节 CP2"
+    change: "quantize 显式使用 ROUND_HALF_UP。"
+    why: "quantize 不传 rounding 时用的是当前 decimal 上下文的舍入方式，默认 ROUND_HALF_EVEN。0.03 x 17.5% = 0.00525 会得到 0.0052。"
+    required: true
+    unit_tests: [U7]
+  - id: CP3
+    file: "src/oscar/apps/partner/strategy.py"
+    symbol: "FixedRateTax.parent_pricing_policy"
+    lines: [303]
+    answer_section: "answer.md 第 2 节 CP3"
+    change: "父商品报价路径上的同一处 quantize 同样显式使用 ROUND_HALF_UP。"
+    why: "父商品的价格由另一段几乎相同的代码计算，只改 pricing_policy 会留下这一处。"
+    required: true
+    unit_tests: [U6, U8]
+  - id: CP4
+    file: "src/oscar/apps/basket/abstract_models.py"
+    symbol: "AbstractBasket._get_total"
+    lines: [444, 465]
+    answer_section: "answer.md 第 2 节 CP4"
+    change: "合计改为各行金额先各自四舍五入到分再相加。"
+    why: "分项加起来必须等于合计。先把未舍入的行金额加总再舍入一次，两行各 0.036 会得到 0.07，而页面上两行各显示 0.04。整改前单价是两位小数，这个等式天然成立，精度一改就破了。"
+    required: true
+    unit_tests: [U1, U3, U4, U5, U9, U15, U16, U17, U18, U19, U35, U37]
+  - id: CP5
+    file: "src/oscar/apps/basket/abstract_models.py"
+    symbol: "AbstractLine.line_price_excl_tax_incl_discounts"
+    lines: [968, 1013]
+    answer_section: "answer.md 第 2 节 CP5"
+    change: "折后不含税行金额对最终结果舍入一次，不再先把折算出的不含税折扣舍入到分。"
+    why: "20.00 - 9.375 = 10.625 应为 10.63。先把 9.375 舍成 9.38 再相减得到 10.62，订单行、税额都跟着差一分。"
+    required: false
+    unit_tests: []
+    note: "参考实现的写法。行金额在 CP4 里逐行取到分以后，这里再舍入一次不改变任何断言的结果；单独撤掉不影响得分。"
+  - id: CP6
+    file: "src/oscar/apps/basket/abstract_models.py"
+    symbol: "AbstractLine.line_price_incl_tax_incl_discounts"
+    lines: [1014, 1032]
+    answer_section: "answer.md 第 2 节 CP6"
+    change: "折后含税行金额在有折扣的两个分支都舍入到分。"
+    why: "含税单价变成四位小数后，行金额减折扣的结果不再天然是两位小数。"
+    required: false
+    unit_tests: []
+    note: "参考实现的写法，理由同 CP5。"
+  - id: CP7
+    file: "src/oscar/apps/basket/abstract_models.py"
+    symbol: "AbstractLine.get_price_breakdown"
+    lines: [833]
+    answer_section: "answer.md 第 2 节 CP7"
+    change: "分摊到单件的不含税折扣按四位小数保留。"
+    why: "这是单件层面的中间量。按两位舍入会让拆分出来的单价与行金额对不上，1 件时行是 2.13 而拆分是 2.12。"
+    required: false
+    unit_tests: []
+    note: "参考实现的写法。价格明细由 CP15 按订单行金额重新分摊，这里的精度不再决定结果；单独撤掉不影响得分。"
+  - id: CP8
+    file: "src/oscar/apps/basket/abstract_models.py"
+    symbol: "AbstractBasket.add_product / AbstractLine.get_warning"
+    lines: [296, 1081]
+    answer_section: "answer.md 第 2 节 CP8"
+    change: "加入购物车时记录的含税价按分保存；价格变动提示在分的精度上比较现价和记录价。"
+    why: "记录价存在两位小数的字段里，现价是四位小数。直接比较时 1.19 != 1.1880，价格没变也会提示“从 £1.19 降到 £1.19”。这是精度改动带来的回归，仓库自带测试不覆盖。"
+    required: true
+    unit_tests: [U27, U28, U40]
+  - id: CP9
+    file: "src/oscar/apps/shipping/methods.py"
+    symbol: "TaxInclusiveOfferDiscount.calculate_excl_tax"
+    lines: [203]
+    answer_section: "answer.md 第 2 节 CP9"
+    change: "折后运费的不含税金额改为四舍五入。"
+    why: "原来的 quantize(D(\"0.01\")) 是银行家舍入，5.00 x 3.75 / 6.00 = 3.125 得到 3.12。"
+    required: true
+    unit_tests: [U13, U29, U33, U38]
+  - id: CP10
+    file: "src/oscar/apps/offer/benefits.py"
+    symbol: "ShippingPercentageDiscountBenefit.shipping_discount"
+    lines: [431]
+    answer_section: "answer.md 第 2 节 CP10"
+    change: "运费百分比折扣改为四舍五入。"
+    why: "同样是不带 rounding 的 quantize，2.50 x 25% = 0.625 得到 0.62。"
+    required: true
+    unit_tests: [U14]
+  - id: CP11
+    file: "src/oscar/apps/order/utils.py"
+    symbol: "to_cents / OrderCreator.create_order_model / create_line_models / create_discount_model"
+    lines: [53, 54, 71, 211, 212, 213, 214, 239, 240, 274, 277, 280, 283, 287, 288, 379]
+    answer_section: "answer.md 第 2 节 CP11"
+    change: "写入订单、订单行、附加费、折扣记录的金额，在写入前显式四舍五入到分。"
+    why: "四位小数的金额写进两位小数的 DecimalField 时，Django 会用 decimal 上下文的默认方式量化，也是银行家舍入：0.7050 落库成 0.70，而购物车合计是 0.71。"
+    required: true
+    unit_tests: [U9, U11, U12, U17, U18, U19, U20, U29]
+    note: "四段落库里，订单行这一段单独撤掉就有单测失败。订单表、附加费表、折扣记录三段与 CP4、CP12 互为冗余，单独撤掉其中一段不影响得分。"
+  - id: CP12
+    file: "src/oscar/apps/checkout/surcharges.py, src/oscar/apps/checkout/calculators.py"
+    symbol: "PercentageCharge.calculate / OrderTotalCalculator.calculate"
+    lines: [44, 45, 22, 24, 32, 34]
+    answer_section: "answer.md 第 2 节 CP12"
+    change: "百分比附加费舍入到分；订单合计由已舍入到分的购物车合计、运费、各项附加费相加得到。"
+    why: "附加费是订单上单独的一项金额。订单合计必须等于订单行、运费、附加费之和，不能把未舍入的分项加总后再舍入。"
+    required: false
+    unit_tests: []
+    note: "与 CP11 里附加费落库的一段互为冗余：两处任留一处，U12 都通过；两处都撤掉，U12 失败。"
+  - id: CP13
+    file: "src/oscar/templatetags/currency_filters.py"
+    symbol: "currency"
+    lines: [41]
+    answer_section: "answer.md 第 2 节 CP13"
+    change: "金额在交给 Babel 格式化之前，先按币种的小数位四舍五入。"
+    why: "Babel 用 decimal 上下文的默认方式把金额量化到币种精度，0.7050 显示成 £0.70，而合计是 £0.71。四位小数的金额现在会直接到达模板。"
+    required: true
+    unit_tests: [U10, U15, U16, U34]
+  - id: CP14
+    file: "src/oscar/core/utils.py"
+    symbol: "round_half_up_four_dec（新增），round_half_up（保持）"
+    lines: [183, 168]
+    answer_section: "answer.md 第 2 节 CP14"
+    change: "新增四位小数的四舍五入函数；已有的 round_half_up 保持原名和原行为。"
+    why: "round_half_up 是公开函数，基于这个代码库的项目在使用，不能改名或改语义。"
+    required: false
+    unit_tests: []
+    note: "辅助函数。等价实现没有它也通过；保留原有的 round_half_up 不变才是必需的，由 U32 把守。"
+  - id: CP15
+    file: "src/oscar/apps/order/utils.py"
+    symbol: "share_in_cents / unit_price_rows / OrderCreator.create_line_price_models"
+    lines: [28, 38, 347]
+    answer_section: "answer.md 第 2 节 CP15"
+    change: "订单行的价格明细不再逐条把单价舍入到分，而是把订单行金额按分摊到每一件上：同组的件拿相同的单价，除不尽的几分钱加在前几件上，各条明细的金额之和恰好等于订单行金额。"
+    why: "分批发货的结算金额由 EventHandler.calculate_payment_event_subtotal 按价格明细逐件累加。单价 0.012 落成 0.01 后，100 件结算出 1.00，而订单行是 1.20。结算逻辑本身不动，上线前已有订单的明细和已结算的批次因此不受影响。"
+    required: true
+    unit_tests: [U21, U22, U23, U24, U41]
+  - id: CP16
+    file: "src/oscar/apps/search/search_indexes.py"
+    symbol: "ProductIndex.prepare_price"
+    lines: [72]
+    answer_section: "answer.md 第 2 节 CP16"
+    change: "写进搜索索引的商品价格按四舍五入取到分，与商品页显示的价格相同。"
+    why: "索引里的价格是价格筛选、价格区间和按价格排序用的数。整改前它就是页面上的价格；单价保留四位以后，索引里是 1.1880，页面显示 1.19，同一个价格在两处成了两个数。这一处与购物车、订单都没有调用关系，仓库自带的测试也不覆盖。"
+    required: true
+    unit_tests: [U39]

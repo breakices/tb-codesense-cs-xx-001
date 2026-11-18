@@ -1,0 +1,123 @@
+{
+ "task": "CS-XX-001",
+ "ut_total": 41,
+ "models": {
+  "opus5.5": {
+   "runs": 5,
+   "passes": 1,
+   "pass_rate": 0.2,
+   "ut_pass_rate": 0.9707,
+   "per_run": [
+    {
+     "run": "rs41-opus55-v5-02",
+     "score": 0,
+     "ut_passed": 39,
+     "failed": [
+      "U14",
+      "U39"
+     ],
+     "agent_seconds": 1118,
+     "turns": 33,
+     "cost_usd": 1.2475572,
+     "models_called": [
+      "claude-opus-5-5"
+     ]
+    },
+    {
+     "run": "rs41-opus55-v5-04",
+     "score": 0,
+     "ut_passed": 40,
+     "failed": [
+      "U39"
+     ],
+     "agent_seconds": 835,
+     "turns": 41,
+     "cost_usd": 1.5541918,
+     "models_called": [
+      "claude-opus-5-5"
+     ]
+    },
+    {
+     "run": "rs41-opus55-v5-05",
+     "score": 1,
+     "ut_passed": 41,
+     "failed": [],
+     "agent_seconds": 638,
+     "turns": 4,
+     "cost_usd": 1.5721611999999996,
+     "models_called": [
+      "claude-opus-5-5"
+     ]
+    },
+    {
+     "run": "rs41-opus55-v5b-01",
+     "score": 0,
+     "ut_passed": 40,
+     "failed": [
+      "U39"
+     ],
+     "agent_seconds": 795,
+     "turns": 47,
+     "cost_usd": 1.7322106000000002,
+     "models_called": [
+      "claude-opus-5-5"
+     ]
+    },
+    {
+     "run": "rs41-opus55-v5b-02",
+     "score": 0,
+     "ut_passed": 39,
+     "failed": [
+      "U14",
+      "U39"
+     ],
+     "agent_seconds": 538,
+     "turns": 32,
+     "cost_usd": 1.3614659999999998,
+     "models_called": [
+      "claude-opus-5-5"
+     ]
+    }
+   ]
+  }
+ },
+ "void_runs_not_counted": [
+  "void-opus55-v5-01-try1-073744",
+  "void-opus55-v5-01-try2-085546",
+  "void-opus55-v5-01-try3-101350",
+  "void-opus55-v5-02-try1-073742",
+  "void-opus55-v5-02-try2-085546",
+  "void-opus55-v5-03-ended-on-api-error",
+  "void-opus55-v5-03-try1-073748",
+  "void-opus55-v5-03-try2-085553"
+ ],
+ "overall": {
+  "runs": 5,
+  "passes": 1,
+  "pass_rate": 0.2
+ },
+ "discrimination": {
+  "non_passing_runs": 4,
+  "distinct_failure_signatures": 2,
+  "distinct_ratio": 0.5,
+  "largest_signature_share": 0.5,
+  "mean_jaccard_distance_across_models": null,
+  "mean_jaccard_distance_within_model": 0.3333,
+  "signatures": [
+   {
+    "failed": [
+     "U14",
+     "U39"
+    ],
+    "runs": 2
+   },
+   {
+    "failed": [
+     "U39"
+    ],
+    "runs": 2
+   }
+  ],
+  "note": "computed over the runs collected so far; the requirement defines it over five models times five runs"
+ }
+}

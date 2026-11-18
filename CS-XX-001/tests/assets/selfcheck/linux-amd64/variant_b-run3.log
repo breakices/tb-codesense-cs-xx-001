@@ -1,0 +1,8 @@
+case: variant_b run: 3 container: fresh from cs-xx-001:1.0.0
+tree before: 0 changed files, HEAD tree bdea6eaad6894e6167d11d03ae43019d10127467
+patch solution/variants/variant_b.patch exit: 0
+tree when scored: 11 changed files, working tree a8e3897ffa912a7238cf0d04c4c1d5c59fcea536
+command: docker exec -u root <container> sh /tests/test.sh
+test.sh exit: 0
+reward: 1
+--- score.stderr (tail)

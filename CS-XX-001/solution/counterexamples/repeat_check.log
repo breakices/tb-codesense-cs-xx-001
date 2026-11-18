@@ -1,0 +1,6 @@
+ce1 run 1 sha256: 500748aca68998bc
+ce1 run 2 sha256: 500748aca68998bc
+ce1 run 3 sha256: 500748aca68998bc
+ce2 on the draft-only tree, run 1: defects observed: 7 of 7, sha256 42c6a97640a7299a
+ce2 on the draft-only tree, run 2: defects observed: 7 of 7, sha256 42c6a97640a7299a
+ce2 on the draft-only tree, run 3: defects observed: 7 of 7, sha256 42c6a97640a7299a

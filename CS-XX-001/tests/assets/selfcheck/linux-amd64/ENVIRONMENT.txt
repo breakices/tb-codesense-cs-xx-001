@@ -1,0 +1,8 @@
+date_utc: 2026-11-18T15:33:02Z
+host_kernel: Linux 5.15.152-amd64 x86_64
+docker: 28.5.2
+image: cs-xx-001:1.0.0 sha256:375ed9bd8ee332d897b3ddf743d2f3799c4c3132e961ef8878379444c6456d78
+image_platform: linux/amd64
+interpreter: 3.12.14 Linux-5.15.152-amd64-x86_64-with-glibc2.36 django 5.1.15 pytest 8.4.2
+snapshot_commit_in_image: d34ac017e72423af0e99980377d8ef441a2f6c6b
+snapshot_tree_in_image: bdea6eaad6894e6167d11d03ae43019d10127467

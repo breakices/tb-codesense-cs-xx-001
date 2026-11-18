@@ -1,0 +1,11 @@
+python 3.12.13 | django 5.1.15 | macOS-26.6.2-arm64-arm-64bit
+repository: django-oscar a5ed3c9c17d4 (4.2.2), local checkout
+[DEFECT] warning on an unchanged price: "The price of 'Item 1' has decreased from £1.19 to £1.19 since you added it to your basket"
+[DEFECT] order line / settled in two batches: 1.20 / 0.30 + 0.70 = 1.00
+[DEFECT] lines shown / total shown: 0.04 + 0.04 / 0.07
+[DEFECT] order lines / order total: 0.04 + 0.04 / 0.07
+[DEFECT] unit tax of 0.03 at 17.5%: 0.0052
+[DEFECT] 0.7050 in the basket / on the order / on the page: 0.71 / 0.70 / 0.70
+[DEFECT] price of a 0.99 product in the search index / on its page: 1.1880 / 1.19
+defects observed: 7 of 7
+exit status: 0

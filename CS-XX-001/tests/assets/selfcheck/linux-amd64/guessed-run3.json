@@ -1,0 +1,340 @@
+{
+ "task": "CS-XX-001",
+ "valid": true,
+ "score": 0,
+ "ut_total": 41,
+ "ut_passed": 22,
+ "ut_pass_rate": 0.5366,
+ "problems": [],
+ "pytest_exit_code": 1,
+ "results": [
+  {
+   "id": "U1",
+   "ut_name": "test_bulk_small_items_keep_their_tax",
+   "dimension": "语义正确性",
+   "targets_badpattern": false,
+   "status": "passed",
+   "evidence": "all assertions held"
+  },
+  {
+   "id": "U2",
+   "ut_name": "test_unit_price_is_carried_at_four_places",
+   "dimension": "语义正确性",
+   "targets_badpattern": false,
+   "status": "passed",
+   "evidence": "all assertions held"
+  },
+  {
+   "id": "U3",
+   "ut_name": "test_tax_of_a_multi_unit_line_is_not_unit_tax_times_quantity",
+   "dimension": "语义正确性",
+   "targets_badpattern": false,
+   "status": "passed",
+   "evidence": "all assertions held"
+  },
+  {
+   "id": "U4",
+   "ut_name": "test_basket_totals_are_cents_with_percentage_offer_on_gross_prices",
+   "dimension": "语义正确性",
+   "targets_badpattern": false,
+   "status": "passed",
+   "evidence": "all assertions held"
+  },
+  {
+   "id": "U5",
+   "ut_name": "test_basket_totals_are_cents_with_percentage_offer_default_setting",
+   "dimension": "语义正确性",
+   "targets_badpattern": false,
+   "status": "passed",
+   "evidence": "all assertions held"
+  },
+  {
+   "id": "U6",
+   "ut_name": "test_parent_product_price_is_carried_at_four_places",
+   "dimension": "改一查十完备性",
+   "targets_badpattern": false,
+   "status": "passed",
+   "evidence": "all assertions held"
+  },
+  {
+   "id": "U7",
+   "ut_name": "test_unit_tax_rounds_half_up_at_the_fourth_place",
+   "dimension": "单轮反幻觉",
+   "targets_badpattern": true,
+   "status": "failed",
+   "evidence": "AssertionError: assert Decimal('0.0052') == Decimal('0.0053') | +  where Decimal('0.0052') = four_places(Decimal('0.0052')) | +    where Decimal('0.0052') = TaxInclusiveFixedPrice({'currency': 'GBP', 'excl_tax': Decimal('0.03'), 'tax': Decimal('0.0052'), 'tax_code': None}).tax | +  and   Decimal('0.0053') = D('0.0053') @ test_money_contract.py:128: in test_unit_tax_rounds_half_up_at_the_fourth_place"
+  },
+  {
+   "id": "U8",
+   "ut_name": "test_parent_unit_tax_rounds_half_up_at_the_fourth_place",
+   "dimension": "改一查十完备性",
+   "targets_badpattern": true,
+   "status": "failed",
+   "evidence": "AssertionError: assert Decimal('0.0052') == Decimal('0.0053') | +  where Decimal('0.0052') = four_places(Decimal('0.0052')) | +    where Decimal('0.0052') = FixedPrice({'currency': 'GBP', 'excl_tax': Decimal('0.03'), 'tax': Decimal('0.0052'), 'tax_code': None}).tax | +  and   Decimal('0.0053') = D('0.0053') @ test_money_contract.py:135: in test_parent_unit_tax_rounds_half_up_at_the_fourth_place"
+  },
+  {
+   "id": "U9",
+   "ut_name": "test_gross_amount_at_a_tie_is_half_up_in_the_basket_and_on_the_order",
+   "dimension": "改一查十完备性",
+   "targets_badpattern": true,
+   "status": "failed",
+   "evidence": "AssertionError: assert Decimal('0.70') == Decimal('0.71') | +  where Decimal('0.70') = <Line: Product 'Item 21', quantity '1'>.line_price_incl_tax | +  and   Decimal('0.71') = D('0.71') @ test_money_contract.py:150: in test_gross_amount_at_a_tie_is_half_up_in_the_basket_and_on_the_order"
+  },
+  {
+   "id": "U10",
+   "ut_name": "test_displayed_amount_is_rounded_half_up",
+   "dimension": "改一查十完备性",
+   "targets_badpattern": true,
+   "status": "failed",
+   "evidence": "AssertionError: assert '£0.70' == '£0.71' |  | - £0.71 | ?     ^ | + £0.70 | ?     ^ @ test_money_contract.py:161: in test_displayed_amount_is_rounded_half_up"
+  },
+  {
+   "id": "U11",
+   "ut_name": "test_order_without_offers_stores_cents",
+   "dimension": "语义正确性",
+   "targets_badpattern": false,
+   "status": "passed",
+   "evidence": "all assertions held"
+  },
+  {
+   "id": "U12",
+   "ut_name": "test_order_with_percentage_surcharge_adds_up_in_cents",
+   "dimension": "改一查十完备性",
+   "targets_badpattern": true,
+   "status": "failed",
+   "evidence": "AssertionError: assert Decimal('0.22') == Decimal('0.23') | +  where Decimal('0.22') = <Surcharge: Surcharge object (1)>.incl_tax | +  and   Decimal('0.23') = D('0.23') @ test_money_contract.py:190: in test_order_with_percentage_surcharge_adds_up_in_cents"
+  },
+  {
+   "id": "U13",
+   "ut_name": "test_discounted_shipping_net_charge_rounds_half_up",
+   "dimension": "改一查十完备性",
+   "targets_badpattern": true,
+   "status": "failed",
+   "evidence": "AssertionError: assert Decimal('3.12') == Decimal('3.13') | +  where Decimal('3.12') = cents(Decimal('3.12')) | +    where Decimal('3.12') = Price(currency='GBP', excl_tax=Decimal('3.12'), incl_tax=Decimal('3.75'), tax=Decimal('0.63')).excl_tax | +  and   Decimal('3.13') = D('3.13') @ test_money_contract.py:207: in test_discounted_shipping_net_charge_rounds_half_up"
+  },
+  {
+   "id": "U14",
+   "ut_name": "test_percentage_shipping_discount_rounds_half_up",
+   "dimension": "改一查十完备性",
+   "targets_badpattern": true,
+   "status": "failed",
+   "evidence": "AssertionError: assert Decimal('0.62') == Decimal('0.63') | +  where Decimal('0.62') = cents(Decimal('0.62')) | +    where Decimal('0.62') = discount(<Basket: Open basket (owner: None, lines: 1)>) | +      where discount = <oscar.apps.shipping.methods.TaxExclusiveOfferDiscount object at 0x7f944b8887a0>.discount | +  and   Decimal('0.63') = D('0.63') @ test_money_contract.py:217: in test_percentage_shipping_discount_rounds_half_up"
+  },
+  {
+   "id": "U15",
+   "ut_name": "test_lines_shown_in_the_basket_add_up_to_the_total_shown",
+   "dimension": "单轮反幻觉",
+   "targets_badpattern": true,
+   "status": "failed",
+   "evidence": "AssertionError: assert Decimal('0.07') == Decimal('0.08') | +  where Decimal('0.07') = shown(Decimal('0.07')) | +    where Decimal('0.07') = <Basket: Open basket (owner: None, lines: 2)>.total_incl_tax_excl_discounts @ test_money_contract.py:236: in test_lines_shown_in_the_basket_add_up_to_the_total_shown"
+  },
+  {
+   "id": "U16",
+   "ut_name": "test_lines_shown_add_up_to_the_total_shown_when_they_tie",
+   "dimension": "改一查十完备性",
+   "targets_badpattern": true,
+   "status": "failed",
+   "evidence": "AssertionError: assert Decimal('1.41') == Decimal('1.40') | +  where Decimal('1.41') = shown(Decimal('1.41')) | +    where Decimal('1.41') = <Basket: Open basket (owner: None, lines: 2)>.total_incl_tax @ test_money_contract.py:246: in test_lines_shown_add_up_to_the_total_shown_when_they_tie"
+  },
+  {
+   "id": "U17",
+   "ut_name": "test_order_lines_add_up_to_the_order_total",
+   "dimension": "改一查十完备性",
+   "targets_badpattern": true,
+   "status": "failed",
+   "evidence": "AssertionError: assert Decimal('0.07') == Decimal('0.08') | +  where Decimal('0.07') = <Order: #100001>.total_incl_tax | +  and   Decimal('0.08') = sum(<generator object test_order_lines_add_up_to_the_order_total.<locals>.<genexpr> at 0x7f944bd974c0>) @ test_money_contract.py:258: in test_order_lines_add_up_to_the_order_total"
+  },
+  {
+   "id": "U18",
+   "ut_name": "test_order_lines_add_up_to_the_order_total_when_they_tie",
+   "dimension": "改一查十完备性",
+   "targets_badpattern": true,
+   "status": "failed",
+   "evidence": "AssertionError: assert Decimal('1.41') == Decimal('1.40') | +  where Decimal('1.41') = <Order: #100001>.total_incl_tax | +  and   Decimal('1.40') = sum(<generator object test_order_lines_add_up_to_the_order_total_when_they_tie.<locals>.<genexpr> at 0x7f944b7144c0>) @ test_money_contract.py:268: in test_order_lines_add_up_to_the_order_total_when_they_tie"
+  },
+  {
+   "id": "U19",
+   "ut_name": "test_discounted_order_lines_add_up_to_the_order_total",
+   "dimension": "语义正确性",
+   "targets_badpattern": false,
+   "status": "failed",
+   "evidence": "AssertionError: assert Decimal('1.69') == Decimal('1.68') | +  where Decimal('1.69') = <Order: #100001>.total_excl_tax | +  and   Decimal('1.68') = sum(<generator object test_discounted_order_lines_add_up_to_the_order_total.<locals>.<genexpr> at 0x7f944b714f40>) @ test_money_contract.py:282: in test_discounted_order_lines_add_up_to_the_order_total"
+  },
+  {
+   "id": "U20",
+   "ut_name": "test_single_line_order_agrees_with_its_totals",
+   "dimension": "回归安全",
+   "targets_badpattern": false,
+   "status": "passed",
+   "evidence": "all assertions held"
+  },
+  {
+   "id": "U21",
+   "ut_name": "test_price_row_of_single_unit_agrees_with_its_order_line",
+   "dimension": "改一查十完备性",
+   "targets_badpattern": true,
+   "status": "passed",
+   "evidence": "all assertions held"
+  },
+  {
+   "id": "U22",
+   "ut_name": "test_batches_settle_to_the_order_line_amount",
+   "dimension": "单轮反幻觉",
+   "targets_badpattern": true,
+   "status": "failed",
+   "evidence": "AssertionError: assert Decimal('1.00') == Decimal('1.20') | +  where Decimal('1.00') = sum([Decimal('0.30'), Decimal('0.70')]) | +  and   Decimal('1.20') = <Line: Product 'Item 60', quantity '100'>.line_price_incl_tax @ test_money_contract.py:331: in test_batches_settle_to_the_order_line_amount"
+  },
+  {
+   "id": "U23",
+   "ut_name": "test_unit_by_unit_settlement_adds_up_to_the_order_line_amount",
+   "dimension": "改一查十完备性",
+   "targets_badpattern": true,
+   "status": "failed",
+   "evidence": "AssertionError: assert Decimal('8.33') == Decimal('8.32') | +  where Decimal('8.33') = sum([Decimal('1.19'), Decimal('1.19'), Decimal('1.19'), Decimal('1.19'), Decimal('1.19'), Decimal('1.19'), ...]) | +  and   Decimal('8.32') = <Line: Product 'Item 62', quantity '7'>.line_price_incl_tax @ test_money_contract.py:342: in test_unit_by_unit_settlement_adds_up_to_the_order_line_amount"
+  },
+  {
+   "id": "U24",
+   "ut_name": "test_settlement_of_a_partly_discounted_line_adds_up",
+   "dimension": "改一查十完备性",
+   "targets_badpattern": true,
+   "status": "failed",
+   "evidence": "AssertionError: assert Decimal('18.80') == Decimal('18.78') | +  where Decimal('18.80') = sum([Decimal('7.20'), Decimal('11.60')]) | +  and   Decimal('18.78') = <Line: Product 'Item 64', quantity '5'>.line_price_incl_tax @ test_money_contract.py:355: in test_settlement_of_a_partly_discounted_line_adds_up"
+  },
+  {
+   "id": "U25",
+   "ut_name": "test_order_placed_before_the_change_settles_its_remaining_units",
+   "dimension": "回归安全",
+   "targets_badpattern": false,
+   "status": "passed",
+   "evidence": "all assertions held"
+  },
+  {
+   "id": "U26",
+   "ut_name": "test_order_placed_before_the_change_settles_in_full",
+   "dimension": "回归安全",
+   "targets_badpattern": false,
+   "status": "passed",
+   "evidence": "all assertions held"
+  },
+  {
+   "id": "U27",
+   "ut_name": "test_no_price_change_warning_when_the_price_did_not_change",
+   "dimension": "单轮反幻觉",
+   "targets_badpattern": true,
+   "status": "failed",
+   "evidence": "assert \"The price of 'Item 69' has decreased from £1.19 to £1.19 since you added it to your basket\" is None | +  where \"The price of 'Item 69' has decreased from £1.19 to £1.19 since you added it to your basket\" = get_warning() | +    where get_warning = <Line: Basket #1, Product #1, quantity 1>.get_warning @ test_money_contract.py:388: in test_no_price_change_warning_when_the_price_did_not_change"
+  },
+  {
+   "id": "U28",
+   "ut_name": "test_price_change_warning_is_still_reported_for_a_real_change",
+   "dimension": "回归安全",
+   "targets_badpattern": false,
+   "status": "passed",
+   "evidence": "all assertions held"
+  },
+  {
+   "id": "U29",
+   "ut_name": "test_discounted_shipping_charge_is_stored_as_shown",
+   "dimension": "改一查十完备性",
+   "targets_badpattern": true,
+   "status": "passed",
+   "evidence": "all assertions held"
+  },
+  {
+   "id": "U30",
+   "ut_name": "test_untaxed_strategy_totals_unchanged",
+   "dimension": "回归安全",
+   "targets_badpattern": false,
+   "status": "passed",
+   "evidence": "all assertions held"
+  },
+  {
+   "id": "U31",
+   "ut_name": "test_absolute_offer_without_tax_unchanged",
+   "dimension": "回归安全",
+   "targets_badpattern": false,
+   "status": "passed",
+   "evidence": "all assertions held"
+  },
+  {
+   "id": "U32",
+   "ut_name": "test_existing_two_place_helper_keeps_its_behaviour",
+   "dimension": "回归安全",
+   "targets_badpattern": false,
+   "status": "passed",
+   "evidence": "all assertions held"
+  },
+  {
+   "id": "U33",
+   "ut_name": "test_discounted_shipping_without_tie_unchanged_in_cents",
+   "dimension": "回归安全",
+   "targets_badpattern": false,
+   "status": "passed",
+   "evidence": "all assertions held"
+  },
+  {
+   "id": "U34",
+   "ut_name": "test_displayed_amount_format_unchanged_for_ordinary_values",
+   "dimension": "回归安全",
+   "targets_badpattern": false,
+   "status": "passed",
+   "evidence": "all assertions held"
+  },
+  {
+   "id": "U35",
+   "ut_name": "test_net_total_is_cents_when_tax_is_not_known",
+   "dimension": "边界与异常",
+   "targets_badpattern": false,
+   "status": "passed",
+   "evidence": "all assertions held"
+  },
+  {
+   "id": "U36",
+   "ut_name": "test_fully_discounted_basket_is_zero_not_negative",
+   "dimension": "边界与异常",
+   "targets_badpattern": false,
+   "status": "passed",
+   "evidence": "all assertions held"
+  },
+  {
+   "id": "U37",
+   "ut_name": "test_empty_basket_totals_are_zero",
+   "dimension": "边界与异常",
+   "targets_badpattern": false,
+   "status": "passed",
+   "evidence": "all assertions held"
+  },
+  {
+   "id": "U38",
+   "ut_name": "test_free_shipping_after_discount_has_no_net_charge",
+   "dimension": "边界与异常",
+   "targets_badpattern": false,
+   "status": "passed",
+   "evidence": "all assertions held"
+  },
+  {
+   "id": "U39",
+   "ut_name": "test_indexed_price_is_the_price_shown",
+   "dimension": "改一查十完备性",
+   "targets_badpattern": true,
+   "status": "failed",
+   "evidence": "AssertionError: 0.99 | assert Decimal('1.1880') == Decimal('1.19') | +  where Decimal('1.1880') = D('1.1880') | +    where '1.1880' = str(Decimal('1.1880')) | +  and   Decimal('1.19') = shown(Decimal('1.1880')) | +    where Decimal('1.1880') = TaxInclusiveFixedPrice({'currency': 'GBP', 'excl_tax': Decimal('0.99'), 'tax': Decimal('0.1980'), 'tax_code': None}).incl_tax @ test_money_contract.py:543: in test_indexed_price_is_the_price_shown"
+  },
+  {
+   "id": "U40",
+   "ut_name": "test_no_price_change_warning_at_a_tie",
+   "dimension": "改一查十完备性",
+   "targets_badpattern": true,
+   "status": "failed",
+   "evidence": "AssertionError: 0.60 | assert \"The price of 'Item 95' has increased from £0.70 to £0.70 since you added it to your basket\" is None | +  where \"The price of 'Item 95' has increased from £0.70 to £0.70 since you added it to your basket\" = get_warning() | +    where get_warning = <Line: Basket #1, Product #1, quantity 2>.get_warning @ test_money_contract.py:557: in test_no_price_change_warning_at_a_tie"
+  },
+  {
+   "id": "U41",
+   "ut_name": "test_batches_settle_to_the_order_line_amount_at_a_tie",
+   "dimension": "改一查十完备性",
+   "targets_badpattern": true,
+   "status": "failed",
+   "evidence": "AssertionError: assert Decimal('2.10') == Decimal('2.12') | +  where Decimal('2.10') = sum([Decimal('0.70'), Decimal('1.40')]) | +  and   Decimal('2.12') = <Line: Product 'Item 97', quantity '3'>.line_price_incl_tax @ test_money_contract.py:568: in test_batches_settle_to_the_order_line_amount_at_a_tie"
+  }
+ ]
+}

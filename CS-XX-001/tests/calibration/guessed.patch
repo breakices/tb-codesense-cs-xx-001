@@ -1,0 +1,26 @@
+diff --git a/src/oscar/apps/basket/abstract_models.py b/src/oscar/apps/basket/abstract_models.py
+index 3bbaeb7..c9115fe 100644
+--- a/src/oscar/apps/basket/abstract_models.py
++++ b/src/oscar/apps/basket/abstract_models.py
+@@ -452,7 +452,7 @@ class AbstractBasket(models.Model):
+                 info = self.get_stock_info(line.product, line.attributes.all())
+                 if info.availability.is_available_to_buy:
+                     raise
+-        return total
++        return round_half_up(total)
+ 
+     # ==========
+     # Properties
+diff --git a/src/oscar/apps/partner/strategy.py b/src/oscar/apps/partner/strategy.py
+index c2e5310..72bc611 100644
+--- a/src/oscar/apps/partner/strategy.py
++++ b/src/oscar/apps/partner/strategy.py
+@@ -277,7 +277,7 @@ class FixedRateTax(object):
+     """
+ 
+     rate = D("0")  # Subclass and specify the correct rate
+-    exponent = D("0.01")  # Default to two decimal places
++    exponent = D("0.0001")  # Default to four decimal places
+ 
+     def pricing_policy(self, product, stockrecord):
+         if not stockrecord or stockrecord.price is None:

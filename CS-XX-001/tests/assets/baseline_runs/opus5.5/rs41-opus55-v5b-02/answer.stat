@@ -1,0 +1,7 @@
+ src/oscar/apps/basket/abstract_models.py   | 158 ++++++++++++++++++++++-------
+ src/oscar/apps/checkout/surcharges.py      |   5 +-
+ src/oscar/apps/order/utils.py              |  49 ++++++---
+ src/oscar/apps/partner/strategy.py         |  12 ++-
+ src/oscar/apps/shipping/methods.py         |   3 +-
+ src/oscar/templatetags/currency_filters.py |  15 ++-
+ 6 files changed, 184 insertions(+), 58 deletions(-)

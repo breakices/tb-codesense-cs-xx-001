@@ -1,0 +1,466 @@
+diff --git a/src/oscar/apps/basket/abstract_models.py b/src/oscar/apps/basket/abstract_models.py
+index 3bbaeb7..1d03f36 100644
+--- a/src/oscar/apps/basket/abstract_models.py
++++ b/src/oscar/apps/basket/abstract_models.py
+@@ -280,14 +280,17 @@ class AbstractBasket(models.Model):
+ 
+         # Determine price to store (if one exists).  It is only stored for
+         # audit and sometimes caching.
++        # Unit prices may be more precise than the two decimal places stored
++        # on the line, so round them (half up) to the presented amount rather
++        # than leaving it to the database backend.
+         defaults = {
+             "quantity": max(0, quantity),
+-            "price_excl_tax": stock_info.price.excl_tax,
++            "price_excl_tax": round_half_up(stock_info.price.excl_tax),
+             "price_currency": stock_info.price.currency,
+             "tax_code": stock_info.price.tax_code,
+         }
+         if stock_info.price.is_tax_known:
+-            defaults["price_incl_tax"] = stock_info.price.incl_tax
++            defaults["price_incl_tax"] = round_half_up(stock_info.price.incl_tax)
+ 
+         line, created = self.lines.get_or_create(
+             line_reference=line_ref,
+@@ -439,11 +442,14 @@ class AbstractBasket(models.Model):
+         """
+         For executing a named method on each line of the basket
+         and returning the total.
++
++        Each line amount is rounded to the presented precision before it is
++        added, so the total always equals the sum of the line amounts shown.
+         """
+         total = D("0.00")
+         for line in self.all_lines():
+             try:
+-                total += getattr(line, model_property)
++                total += round_half_up(D(getattr(line, model_property)))
+             except ObjectDoesNotExist:
+                 # Handle situation where the product may have been deleted
+                 pass
+@@ -804,41 +810,94 @@ class AbstractLine(models.Model):
+ 
+         Returns a list of (unit_price_incl_tax, unit_price_excl_tax, quantity)
+         tuples.
++
++        Unit prices are rounded to two decimal places and the breakdown always
++        adds up to the line prices: summing ``unit_price * quantity`` over the
++        tuples gives exactly ``line_price_incl_tax_incl_discounts`` and
++        ``line_price_excl_tax_incl_discounts``.  Where a line amount cannot be
++        divided evenly between its units, the remaining pennies are spread over
++        some of the units, which then get a separate tuple.
+         """
+         if not self.is_tax_known:
+             raise RuntimeError(
+                 "A price breakdown can only be determined when taxes are known"
+             )
+-        prices = []
++        if not self.quantity:
++            return [
++                (
++                    round_half_up(self.unit_price_incl_tax),
++                    round_half_up(self.unit_price_excl_tax),
++                    self.quantity,
++                )
++            ]
++
++        line_incl_tax = self.line_price_incl_tax_incl_discounts
++        line_excl_tax = self.line_price_excl_tax_incl_discounts
++        groups = []
+         if not self.discount_value:
+-            prices.append(
+-                (self.unit_price_incl_tax, self.unit_price_excl_tax, self.quantity)
+-            )
++            groups.append((line_incl_tax, line_excl_tax, self.quantity))
+         else:
+-            # Need to split the discount among the affected quantity
+-            # of products.
+-            item_incl_tax_discount = self.discount_value / int(
+-                self.discounts.num_consumed()
++            # The units without discount are charged at their normal price;
++            # the discounted units account for the rest of the line amount.
++            num_discounted = int(self.discounts.num_consumed())
++            num_full_price = int(self.quantity_without_discount)
++            full_price_incl_tax = round_half_up(
++                num_full_price * self.unit_price_incl_tax
++            )
++            full_price_excl_tax = round_half_up(
++                num_full_price * self.unit_price_excl_tax
+             )
+-            item_excl_tax_discount = item_incl_tax_discount * self._tax_ratio
+-            item_excl_tax_discount = round_half_up(item_excl_tax_discount)
+-            prices.append(
++            groups.append(
+                 (
+-                    self.unit_price_incl_tax - item_incl_tax_discount,
+-                    self.unit_price_excl_tax - item_excl_tax_discount,
+-                    self.discounts.num_consumed(),
++                    line_incl_tax - full_price_incl_tax,
++                    line_excl_tax - full_price_excl_tax,
++                    num_discounted,
+                 )
+             )
+-            if self.quantity_without_discount:
+-                prices.append(
+-                    (
+-                        self.unit_price_incl_tax,
+-                        self.unit_price_excl_tax,
+-                        self.quantity_without_discount,
+-                    )
++            if num_full_price:
++                groups.append(
++                    (full_price_incl_tax, full_price_excl_tax, num_full_price)
+                 )
++
++        prices = []
++        for amount_incl_tax, amount_excl_tax, quantity in groups:
++            prices.extend(
++                self._split_amount(amount_incl_tax, amount_excl_tax, quantity)
++            )
+         return prices
+ 
++    @staticmethod
++    def _split_amount(amount_incl_tax, amount_excl_tax, quantity):
++        """
++        Split two-decimal amounts over ``quantity`` units, returning
++        (unit_price_incl_tax, unit_price_excl_tax, quantity) tuples whose
++        unit prices have two decimal places and add up to the amounts.
++        """
++        if quantity <= 0:
++            return []
++
++        def per_unit(amount):
++            cents = int(round_half_up(amount).scaleb(2))
++            base, remainder = divmod(cents, quantity)
++            return base, remainder
++
++        base_incl, extra_incl = per_unit(amount_incl_tax)
++        base_excl, extra_excl = per_unit(amount_excl_tax)
++
++        def to_money(cents):
++            return D(cents).scaleb(-2)
++
++        both = min(extra_incl, extra_excl)
++        parts = [
++            (base_incl + 1, base_excl + 1, both),
++            (base_incl + 1, base_excl, extra_incl - both),
++            (base_incl, base_excl + 1, extra_excl - both),
++            (base_incl, base_excl, quantity - max(extra_incl, extra_excl)),
++        ]
++        return [
++            (to_money(incl), to_money(excl), qty) for incl, excl, qty in parts if qty
++        ]
++
+     # =======
+     # Helpers
+     # =======
+@@ -953,7 +1012,7 @@ class AbstractLine(models.Model):
+     @property
+     def line_price_excl_tax(self):
+         if self.unit_price_excl_tax is not None:
+-            return self.quantity * self.unit_price_excl_tax
++            return round_half_up(self.quantity * self.unit_price_excl_tax)
+ 
+     @property
+     def line_price_excl_tax_incl_discounts(self):
+@@ -964,7 +1023,10 @@ class AbstractLine(models.Model):
+         if excl_tax_discounts:
+             # these are discounts that return a value excluding tax, we can simply
+             # subtract this value from line_price_excl_tax to get to line_price_excl_tax_incl_discounts
+-            return max(0, self.line_price_excl_tax - excl_tax_discounts)
++            return max(
++                D("0.00"),
++                self.line_price_excl_tax - round_half_up(excl_tax_discounts),
++            )
+ 
+         # This is a tricky situation.  We know the discount as calculated
+         # against tax inclusive prices but we need to guess how much of the
+@@ -980,14 +1042,21 @@ class AbstractLine(models.Model):
+                 # this will create the smallest deviation becaise incl_tax_discounts is usually
+                 # smaller than line_price_excl_tax
+                 return max(
+-                    0,
++                    D("0.00"),
+                     self.line_price_excl_tax
+                     - round_half_up(self._tax_ratio * incl_tax_discounts),
+                 )
+             elif self.line_price_incl_tax is not None:
+                 # when all else fails, compute based on line_price_incl_tax
+                 return max(
+-                    0, self._tax_ratio * (self.line_price_incl_tax - incl_tax_discounts)
++                    D("0.00"),
++                    round_half_up(
++                        self._tax_ratio
++                        * (
++                            self.line_price_incl_tax
++                            - round_half_up(incl_tax_discounts)
++                        )
++                    ),
+                 )
+ 
+         # there are no discounts so just return the line_price_excl_tax
+@@ -1002,7 +1071,10 @@ class AbstractLine(models.Model):
+         # calculated against the tax-exclusive prices, then the line price
+         # including tax
+         if self.line_price_incl_tax is not None and incl_tax_discounts:
+-            return max(0, self.line_price_incl_tax - incl_tax_discounts)
++            return max(
++                D("0.00"),
++                self.line_price_incl_tax - round_half_up(incl_tax_discounts),
++            )
+         elif self.line_price_excl_tax is not None and excl_tax_discounts:
+             return round_half_up(
+                 self.line_price_excl_tax_incl_discounts / self._tax_ratio
+@@ -1021,7 +1093,7 @@ class AbstractLine(models.Model):
+     @property
+     def line_price_incl_tax(self):
+         if self.unit_price_incl_tax is not None:
+-            return self.quantity * self.unit_price_incl_tax
++            return round_half_up(self.quantity * self.unit_price_incl_tax)
+ 
+     @property
+     def description(self):
+@@ -1056,8 +1128,10 @@ class AbstractLine(models.Model):
+         if not self.purchase_info.price.is_tax_known:
+             return
+ 
+-        # Compare current price to price when added to basket
+-        current_price_incl_tax = self.purchase_info.price.incl_tax
++        # Compare current price to price when added to basket.  The stored
++        # price has two decimal places, so compare against the current price
++        # rounded the same way.
++        current_price_incl_tax = round_half_up(self.purchase_info.price.incl_tax)
+         if current_price_incl_tax != self.price_incl_tax:
+             product_prices = {
+                 "product": self.product.get_title(),
+diff --git a/src/oscar/apps/checkout/calculators.py b/src/oscar/apps/checkout/calculators.py
+index c919c7e..83bbd4c 100644
+--- a/src/oscar/apps/checkout/calculators.py
++++ b/src/oscar/apps/checkout/calculators.py
+@@ -1,4 +1,11 @@
+ from oscar.core import prices
++from oscar.core.utils import round_half_up
++
++
++def _round(amount):
++    if amount is None:
++        return None
++    return round_half_up(amount)
+ 
+ 
+ class OrderTotalCalculator(object):
+@@ -14,16 +21,19 @@ class OrderTotalCalculator(object):
+         self.request = request
+ 
+     def calculate(self, basket, shipping_charge, surcharges=None, **kwargs):
+-        excl_tax = basket.total_excl_tax + shipping_charge.excl_tax
++        # Every component is rounded (half up) to the amount that is presented
++        # and recorded on the order, so the total is the sum of its parts.
++        excl_tax = basket.total_excl_tax + _round(shipping_charge.excl_tax)
+         if basket.is_tax_known and shipping_charge.is_tax_known:
+-            incl_tax = basket.total_incl_tax + shipping_charge.incl_tax
++            incl_tax = basket.total_incl_tax + _round(shipping_charge.incl_tax)
+         else:
+             incl_tax = None
+ 
+         if surcharges is not None:
+-            excl_tax += surcharges.total.excl_tax
+-            if incl_tax is not None:
+-                incl_tax += surcharges.total.incl_tax
++            for surcharge in surcharges:
++                excl_tax += _round(surcharge.price.excl_tax)
++                if incl_tax is not None:
++                    incl_tax += _round(surcharge.price.incl_tax)
+ 
+         return prices.Price(
+             currency=basket.currency, excl_tax=excl_tax, incl_tax=incl_tax
+diff --git a/src/oscar/apps/checkout/surcharges.py b/src/oscar/apps/checkout/surcharges.py
+index 7a10826..738dee0 100644
+--- a/src/oscar/apps/checkout/surcharges.py
++++ b/src/oscar/apps/checkout/surcharges.py
+@@ -3,6 +3,7 @@ from decimal import Decimal as D
+ from django.utils.translation import gettext_lazy as _
+ 
+ from oscar.core import prices
++from oscar.core.utils import round_half_up
+ 
+ 
+ class BaseSurcharge:
+@@ -39,8 +40,8 @@ class PercentageCharge(BaseSurcharge):
+ 
+             return prices.Price(
+                 currency=basket.currency,
+-                excl_tax=total_excl_tax * self.percentage / 100,
+-                incl_tax=total_incl_tax * self.percentage / 100,
++                excl_tax=round_half_up(total_excl_tax * self.percentage / 100),
++                incl_tax=round_half_up(total_incl_tax * self.percentage / 100),
+             )
+         else:
+             return prices.Price(
+diff --git a/src/oscar/apps/offer/benefits.py b/src/oscar/apps/offer/benefits.py
+index dc0a075..8138bac 100644
+--- a/src/oscar/apps/offer/benefits.py
++++ b/src/oscar/apps/offer/benefits.py
+@@ -1,5 +1,6 @@
+ # pylint: disable=W0621, unused-argument
+ 
++from decimal import ROUND_HALF_UP
+ from decimal import Decimal as D
+ 
+ from django.conf import settings
+@@ -427,4 +428,4 @@ class ShippingPercentageDiscountBenefit(ShippingBenefit):
+ 
+     def shipping_discount(self, charge, currency=None):
+         discount = charge * self.value / D("100.0")
+-        return discount.quantize(D("0.01"))
++        return discount.quantize(D("0.01"), ROUND_HALF_UP)
+diff --git a/src/oscar/apps/order/utils.py b/src/oscar/apps/order/utils.py
+index 716affd..ec57e2e 100644
+--- a/src/oscar/apps/order/utils.py
++++ b/src/oscar/apps/order/utils.py
+@@ -8,6 +8,7 @@ from django.utils.translation import gettext_lazy as _
+ 
+ from oscar.apps.order.signals import order_placed
+ from oscar.core.loading import get_class, get_model
++from oscar.core.utils import round_half_up
+ 
+ from . import exceptions
+ 
+@@ -41,6 +42,16 @@ class OrderCreator(object):
+     Places the order by writing out the various models
+     """
+ 
++    @staticmethod
++    def _round(amount):
++        """
++        Round an amount half up to the two decimal places stored on the order
++        models, rather than leaving the rounding to the database backend.
++        """
++        if amount is None:
++            return None
++        return round_half_up(D(amount))
++
+     def place_order(
+         self,
+         basket,
+@@ -149,10 +160,10 @@ class OrderCreator(object):
+             "basket": basket,
+             "number": order_number,
+             "currency": total.currency,
+-            "total_incl_tax": total.incl_tax,
+-            "total_excl_tax": total.excl_tax,
+-            "shipping_incl_tax": shipping_charge.incl_tax,
+-            "shipping_excl_tax": shipping_charge.excl_tax,
++            "total_incl_tax": self._round(total.incl_tax),
++            "total_excl_tax": self._round(total.excl_tax),
++            "shipping_incl_tax": self._round(shipping_charge.incl_tax),
++            "shipping_excl_tax": self._round(shipping_charge.excl_tax),
+             "shipping_tax_code": shipping_charge.tax_code,
+             "shipping_method": shipping_method.name,
+             "shipping_code": shipping_method.code,
+@@ -177,8 +188,8 @@ class OrderCreator(object):
+                     order=order,
+                     name=charge.surcharge.name,
+                     code=charge.surcharge.code,
+-                    excl_tax=charge.price.excl_tax,
+-                    incl_tax=charge.price.incl_tax,
++                    excl_tax=self._round(charge.price.excl_tax),
++                    incl_tax=self._round(charge.price.incl_tax),
+                     tax_code=charge.price.tax_code,
+                 )
+ 
+@@ -217,8 +228,8 @@ class OrderCreator(object):
+             "line_price_before_discounts_excl_tax": basket_line.line_price_excl_tax,
+             "line_price_before_discounts_incl_tax": basket_line.line_price_incl_tax,
+             # Reporting details
+-            "unit_price_incl_tax": basket_line.unit_price_incl_tax,
+-            "unit_price_excl_tax": basket_line.unit_price_excl_tax,
++            "unit_price_incl_tax": self._round(basket_line.unit_price_incl_tax),
++            "unit_price_excl_tax": self._round(basket_line.unit_price_excl_tax),
+             "tax_code": basket_line.tax_code,
+             "num_allocated": basket_line.quantity,
+         }
+diff --git a/src/oscar/apps/partner/strategy.py b/src/oscar/apps/partner/strategy.py
+index c2e5310..cd13459 100644
+--- a/src/oscar/apps/partner/strategy.py
++++ b/src/oscar/apps/partner/strategy.py
+@@ -1,4 +1,5 @@
+ from collections import namedtuple
++from decimal import ROUND_HALF_UP
+ from decimal import Decimal as D
+ 
+ from django.db.models import QuerySet
+@@ -272,19 +273,21 @@ class FixedRateTax(object):
+     """
+     Pricing policy mixin for use with the ``Structured`` base strategy.  This
+     mixin applies a fixed rate tax to the base price from the product's
+-    stockrecord.  The price_incl_tax is quantized to two decimal places.
+-    Rounding behaviour is Decimal's default
++    stockrecord.  The unit tax (and therefore price_incl_tax) is kept at four
++    decimal places, rounded half up, so that line and basket amounts can be
++    rounded to the nearest penny only once, when they are presented.
+     """
+ 
+     rate = D("0")  # Subclass and specify the correct rate
+-    exponent = D("0.01")  # Default to two decimal places
++    exponent = D("0.0001")  # Default to four decimal places
++    rounding = ROUND_HALF_UP
+ 
+     def pricing_policy(self, product, stockrecord):
+         if not stockrecord or stockrecord.price is None:
+             return UnavailablePrice()
+         rate = self.get_rate(product, stockrecord)
+         exponent = self.get_exponent(stockrecord)
+-        tax = (stockrecord.price * rate).quantize(exponent)
++        tax = (stockrecord.price * rate).quantize(exponent, rounding=self.rounding)
+         return TaxInclusiveFixedPrice(
+             currency=stockrecord.price_currency, excl_tax=stockrecord.price, tax=tax
+         )
+@@ -298,7 +301,7 @@ class FixedRateTax(object):
+         stockrecord = stockrecords[0]
+         rate = self.get_rate(product, stockrecord)
+         exponent = self.get_exponent(stockrecord)
+-        tax = (stockrecord.price * rate).quantize(exponent)
++        tax = (stockrecord.price * rate).quantize(exponent, rounding=self.rounding)
+ 
+         return FixedPrice(
+             currency=stockrecord.price_currency, excl_tax=stockrecord.price, tax=tax
+diff --git a/src/oscar/apps/shipping/methods.py b/src/oscar/apps/shipping/methods.py
+index cf57a80..f8fc82e 100644
+--- a/src/oscar/apps/shipping/methods.py
++++ b/src/oscar/apps/shipping/methods.py
+@@ -1,3 +1,4 @@
++from decimal import ROUND_HALF_UP
+ from decimal import Decimal as D
+ 
+ from django.utils.translation import gettext_lazy as _
+@@ -199,7 +200,7 @@ class TaxInclusiveOfferDiscount(OfferDiscount):
+         # We assume we can linearly scale down the excl tax price before
+         # discount.
+         excl_tax = base_charge.excl_tax * (incl_tax / base_charge.incl_tax)
+-        return excl_tax.quantize(D("0.01"))
++        return excl_tax.quantize(D("0.01"), ROUND_HALF_UP)
+ 
+     def discount(self, basket):
+         base_charge = self.method.calculate(basket)
+diff --git a/src/oscar/templatetags/currency_filters.py b/src/oscar/templatetags/currency_filters.py
+index e59b1b9..5e7dda5 100644
+--- a/src/oscar/templatetags/currency_filters.py
++++ b/src/oscar/templatetags/currency_filters.py
+@@ -1,5 +1,5 @@
+ from decimal import Decimal as D
+-from decimal import InvalidOperation
++from decimal import ROUND_HALF_UP, InvalidOperation, localcontext
+ 
+ from babel.numbers import format_currency
+ from django import template
+@@ -32,4 +32,8 @@ def currency(value, currency_format=None):
+         kwargs.update(OSCAR_CURRENCY_FORMAT.get(currency_format, {}))
+     else:
+         kwargs["format"] = OSCAR_CURRENCY_FORMAT
+-    return format_currency(value, **kwargs)
++    # Babel rounds using the current decimal context, which defaults to
++    # banker's rounding. Money is always presented rounded half up.
++    with localcontext() as ctx:
++        ctx.rounding = ROUND_HALF_UP
++        return format_currency(value, **kwargs)
