@@ -1,3 +1,3 @@
-# Historical 38-test Opus runs
+# Opus v5 答卷与评分记录
 
-These five answers were generated against the 38-test development prompt and rescored after U39–U41 were added. Three passed the original suite and one passed the expanded suite. The four later valid Opus runs used 1.1.0, with three passing. Neither series measures 1.1.2. See the [version-by-version baseline](../../../../CS-XX-001-external/06_baseline.md).
+五份答卷生成于 38 项测试的开发版本。`rs41-` 表示新增 U39–U41 后对原答卷重新评分。[运行摘要](SUMMARY.json) · [逐项矩阵](matrix.csv) · [各版本试测记录](../../../../CS-XX-001-external/06_baseline.md)
