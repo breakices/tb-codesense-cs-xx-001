@@ -1,8 +1,10 @@
 # 模型错误模式的真实答卷证据
 
+六组证据来自历史开发与校准运行。FM1 的 U39 是阅读 v5 答卷后增加的诊断项。1.1.1 和 1.1.2 均没有正式模型答卷，这些记录用于解释错误模式；版本、作答轮数和重判范围见[基线记录](06_baseline.md)。
+
 ## FM1
 
-搜索索引里的商品价格没有处理。单价保留四位小数以后，ProductIndex.prepare_price 写进索引的是 1.1880，商品页显示的是 1.19。价格筛选、价格区间和按价格排序用的数与顾客看到的数不再一致。答卷改了定价、购物车、订单、运费和展示，没有打开 search 应用。
+搜索索引里的商品价格没有处理。单价保留四位小数以后，ProductIndex.prepare_price 写进索引的是 1.1880，商品页显示的是 1.19。价格筛选、价格区间和按价格排序用的数与顾客看到的数不再一致。答卷改了定价、购物车、订单、运费和展示，补丁未涉及 search 应用。
 
 - 模型：opus5.5
 - 采集日期：2026-11-18
@@ -16,7 +18,7 @@
 
 ## FM2
 
-运费的百分比折扣仍按默认的银行家舍入取整。答卷没有打开 offer/benefits.py，ShippingPercentageDiscountBenefit.shipping_discount 里的 quantize(D("0.01")) 保持原样。运费 2.50 的 25% 折扣额算出 0.62，应为 0.63。
+运费的百分比折扣仍按默认的银行家舍入取整。答卷补丁未修改 offer/benefits.py，ShippingPercentageDiscountBenefit.shipping_discount 里的 quantize(D("0.01")) 保持原样。运费 2.50 的 25% 折扣额算出 0.62，应为 0.63。
 
 - 模型：opus5.5
 - 采集日期：2026-11-18
@@ -40,7 +42,7 @@
 
   - `2026-11-18 采集，模型 claude-opus-5-5，Claude Code 2.1.318，任务镜像内盲测，第 3 版题面：5 份答卷全部如此，见 tests/assets/earlier_calibration/opus55-v3-0*.result.json，U22 的实际输出为 assert Decimal('1.00') == Decimal('1.20')`
   - `2026-11-17 采集，本机 Claude Code 子代理试答，题面初稿：mac-probe-haiku、mac-probe-sonnet、mac-probe-opus 三份都未通过 U22 到 U24 与 U41，mac-probe-opus 另未通过 U21`
-  - `当前题面下的 5 份有效答卷都处理了这一处`
+  - `38 项开发集上的 5 份 v5 答卷在分批结算用例上全部通过`
 
 ## FM4
 

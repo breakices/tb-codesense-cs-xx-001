@@ -1,0 +1,13 @@
+python 3.12.16 | django 5.1.15 | Linux-7.0.12-linuxkit-x86_64-with-glibc2.36
+repository: /workspace/repo
+[ok] warning on an unchanged price: None
+[ok] order line / settled in two batches: 1.20 / 0.50 + 0.70 = 1.20
+[ok] lines shown / total shown: 0.04 + 0.04 / 0.08
+[ok] order lines / order total: 0.04 + 0.04 / 0.08
+[ok] unit tax of 0.03 at 17.5%: 0.0053
+[ok] 0.7050 in the basket / on the order / on the page: 0.71 / 0.71 / 0.71
+[ok] price of a 0.99 product in the search index / on its page: 1.19 / 1.19
+defects observed: 0 of 7
+/usr/local/lib/python3.12/site-packages/haystack/backends/simple_backend.py:25: UserWarning: update is not implemented in this backend
+  warn("update is not implemented in this backend")
+exit status: 1

@@ -1,0 +1,249 @@
+{
+  "task": "CS-XX-001",
+  "version": "1.1.2",
+  "purpose": "Reference-patch ablation under the revised verifier",
+  "method": "Each case applies the reference patch to a fresh copy of the snapshot source with the specified edits removed or substituted. The external scorer loads that source via --repo and uses its original independent settings and fixtures.",
+  "platform": "darwin",
+  "arch": "arm64",
+  "python": "3.12.13",
+  "django": "5.1.15",
+  "pytest": "8.4.2",
+  "upstream_snapshot": "4dc248a6382cbc26d95644925467e143fa6debcf",
+  "working_tree_parent": "854a9f6c956ad4ebca7b048012ac973050966170",
+  "file_hashes": {
+    "solution/golden/golden.patch": "130c3b08221d5bcc475ca7b10e75cce2d5f3d19800c61f813d6a89aeaa2026bf",
+    "tests/test_money_contract.py": "48b04244916f684baa233316bf4c0da8d66faaeeba4d35c63b8823bf4d93a2d0",
+    "tests/cs_helpers.py": "5ad79d3be965b244439d88920cc6a66bb64377125f1b867a174b2ec820000838",
+    "tests/score.py": "7d50b97c52eccfc8b5f5a201ed719218364c5139890f1db6f3214c8e7af7b63a",
+    "tests/test.sh": "0f296afe6f02361d450c7c8022b5cbc3a96178ecfb01177342bc636da87fc15c",
+    "tests/ut_index.json": "868b18aff358c05d62452de69c118b43297eea630d56882573c683235e671ceb"
+  },
+  "cases": [
+    {
+      "case": "CP12",
+      "modification": "Restore the original percentage surcharge calculation and total calculator.",
+      "valid": true,
+      "passed": 41,
+      "total": 41,
+      "failed": []
+    },
+    {
+      "case": "CP14",
+      "modification": "Remove the new helper and its import. Inline its four-place half-up quantization at its only call site.",
+      "valid": true,
+      "passed": 41,
+      "total": 41,
+      "failed": []
+    },
+    {
+      "case": "CP5",
+      "modification": "Restore both original conditional paths in the discounted tax-exclusive line total.",
+      "valid": true,
+      "passed": 41,
+      "total": 41,
+      "failed": []
+    },
+    {
+      "case": "CP6",
+      "modification": "Restore the original discounted tax-inclusive line total calculation.",
+      "valid": true,
+      "passed": 41,
+      "total": 41,
+      "failed": []
+    },
+    {
+      "case": "CP7",
+      "modification": "Use the original two-place rounding of the per-unit tax-exclusive discount in the price breakdown.",
+      "valid": true,
+      "passed": 41,
+      "total": 41,
+      "failed": []
+    },
+    {
+      "case": "all_reference_only",
+      "modification": "Remove CP5, CP6, CP7 and CP12 together. Remove CP14 and its now-unused import.",
+      "valid": true,
+      "passed": 41,
+      "total": 41,
+      "failed": []
+    },
+    {
+      "case": "golden",
+      "modification": "Complete golden.patch",
+      "valid": true,
+      "passed": 41,
+      "total": 41,
+      "failed": []
+    },
+    {
+      "case": "CP1",
+      "modification": "Restore cent precision as the default exponent of FixedRateTax.",
+      "valid": true,
+      "passed": 33,
+      "total": 41,
+      "failed": [
+        "U1",
+        "U2",
+        "U3",
+        "U5",
+        "U6",
+        "U7",
+        "U8",
+        "U11"
+      ]
+    },
+    {
+      "case": "CP10",
+      "modification": "Restore default rounding of the percentage shipping discount.",
+      "valid": true,
+      "passed": 40,
+      "total": 41,
+      "failed": [
+        "U14"
+      ]
+    },
+    {
+      "case": "CP11",
+      "modification": "Restore the four original order, surcharge, line and discount writes.",
+      "valid": true,
+      "passed": 37,
+      "total": 41,
+      "failed": [
+        "U9",
+        "U18",
+        "U23",
+        "U41"
+      ]
+    },
+    {
+      "case": "CP11a",
+      "modification": "Restore only the original order write.",
+      "valid": true,
+      "passed": 41,
+      "total": 41,
+      "failed": []
+    },
+    {
+      "case": "CP11b",
+      "modification": "Restore only the original surcharge write.",
+      "valid": true,
+      "passed": 41,
+      "total": 41,
+      "failed": []
+    },
+    {
+      "case": "CP11c",
+      "modification": "Restore only the original order line write.",
+      "valid": true,
+      "passed": 37,
+      "total": 41,
+      "failed": [
+        "U9",
+        "U18",
+        "U23",
+        "U41"
+      ]
+    },
+    {
+      "case": "CP11d",
+      "modification": "Restore only the original discount write.",
+      "valid": true,
+      "passed": 41,
+      "total": 41,
+      "failed": []
+    },
+    {
+      "case": "CP13",
+      "modification": "Restore the original currency filter formatting call.",
+      "valid": true,
+      "passed": 37,
+      "total": 41,
+      "failed": [
+        "U10",
+        "U16",
+        "U28",
+        "U39"
+      ]
+    },
+    {
+      "case": "CP15",
+      "modification": "Restore the original unit rows used to settle an order line.",
+      "valid": true,
+      "passed": 36,
+      "total": 41,
+      "failed": [
+        "U21",
+        "U22",
+        "U23",
+        "U24",
+        "U41"
+      ]
+    },
+    {
+      "case": "CP16",
+      "modification": "Restore the original search-index price calculation.",
+      "valid": true,
+      "passed": 40,
+      "total": 41,
+      "failed": [
+        "U39"
+      ]
+    },
+    {
+      "case": "CP2",
+      "modification": "Use default Decimal rounding for the ordinary product strategy.",
+      "valid": true,
+      "passed": 40,
+      "total": 41,
+      "failed": [
+        "U7"
+      ]
+    },
+    {
+      "case": "CP3",
+      "modification": "Use default Decimal rounding for the parent product strategy.",
+      "valid": true,
+      "passed": 40,
+      "total": 41,
+      "failed": [
+        "U8"
+      ]
+    },
+    {
+      "case": "CP4",
+      "modification": "Restore the original calculation of basket totals.",
+      "valid": true,
+      "passed": 35,
+      "total": 41,
+      "failed": [
+        "U3",
+        "U9",
+        "U15",
+        "U16",
+        "U17",
+        "U18"
+      ]
+    },
+    {
+      "case": "CP8",
+      "modification": "Restore the original price written on add_product and the original price comparison on get_warning.",
+      "valid": true,
+      "passed": 39,
+      "total": 41,
+      "failed": [
+        "U27",
+        "U40"
+      ]
+    },
+    {
+      "case": "CP9",
+      "modification": "Restore default rounding in shipping discount net charge.",
+      "valid": true,
+      "passed": 40,
+      "total": 41,
+      "failed": [
+        "U13"
+      ]
+    }
+  ]
+}

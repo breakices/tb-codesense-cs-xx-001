@@ -1,0 +1,133 @@
+{
+  "controls": {
+    "nop": {
+      "runs": 3,
+      "score": 0,
+      "ut_total": 41,
+      "ut_passed": 23,
+      "failed_ids": [
+        "U1",
+        "U2",
+        "U3",
+        "U4",
+        "U5",
+        "U6",
+        "U7",
+        "U8",
+        "U9",
+        "U10",
+        "U11",
+        "U12",
+        "U13",
+        "U14",
+        "U19",
+        "U24",
+        "U28",
+        "U35"
+      ]
+    },
+    "golden": {
+      "runs": 3,
+      "score": 1,
+      "ut_total": 41,
+      "ut_passed": 41,
+      "failed_ids": []
+    },
+    "full_score": {
+      "runs": 3,
+      "score": 1,
+      "ut_total": 41,
+      "ut_passed": 41,
+      "failed_ids": []
+    },
+    "equivalent": {
+      "runs": 3,
+      "score": 1,
+      "ut_total": 41,
+      "ut_passed": 41,
+      "failed_ids": []
+    },
+    "guessed": {
+      "runs": 3,
+      "score": 0,
+      "ut_total": 41,
+      "ut_passed": 21,
+      "failed_ids": [
+        "U7",
+        "U8",
+        "U9",
+        "U10",
+        "U12",
+        "U13",
+        "U14",
+        "U15",
+        "U16",
+        "U17",
+        "U18",
+        "U19",
+        "U22",
+        "U23",
+        "U24",
+        "U27",
+        "U28",
+        "U39",
+        "U40",
+        "U41"
+      ]
+    },
+    "defective": {
+      "runs": 3,
+      "score": 0,
+      "ut_total": 41,
+      "ut_passed": 31,
+      "failed_ids": [
+        "U15",
+        "U16",
+        "U17",
+        "U18",
+        "U22",
+        "U23",
+        "U24",
+        "U27",
+        "U40",
+        "U41"
+      ]
+    },
+    "variant_a": {
+      "runs": 3,
+      "score": 1,
+      "ut_total": 41,
+      "ut_passed": 41,
+      "failed_ids": []
+    },
+    "variant_b": {
+      "runs": 3,
+      "score": 1,
+      "ut_total": 41,
+      "ut_passed": 41,
+      "failed_ids": []
+    }
+  },
+  "image_id": "sha256:d3c1ebd116a1ebaa95886957bf820203f83c42e5da24ceaa7245149098fe4252",
+  "inputs_sha256": {
+    "tests/conftest.py": "9220627e825fd61118c84de50f5e54431b7e9b45ba31dd94335cee7fece538ba",
+    "tests/cs_helpers.py": "5ad79d3be965b244439d88920cc6a66bb64377125f1b867a174b2ec820000838",
+    "tests/cs_settings.py": "e1bd376b37641f79d0ee2f2a01f243548ce4210faf8ad49a807171a47dd34ff7",
+    "tests/cs_urls.py": "ab8e5d207d56e087e1d3341bf931363b2883ea6a8f59394a664f93f195a57e27",
+    "tests/score.py": "7d50b97c52eccfc8b5f5a201ed719218364c5139890f1db6f3214c8e7af7b63a",
+    "tests/test_money_contract.py": "48b04244916f684baa233316bf4c0da8d66faaeeba4d35c63b8823bf4d93a2d0",
+    "tests/test.sh": "0f296afe6f02361d450c7c8022b5cbc3a96178ecfb01177342bc636da87fc15c",
+    "tests/ut_index.json": "868b18aff358c05d62452de69c118b43297eea630d56882573c683235e671ceb",
+    "instruction.md": "243abcdacd373d08058ec8498ed5b4c3ee014541e131093ca194382337f060a3",
+    "environment/Dockerfile": "b3527bd4bb240b0b4e6ee337b4c519d47b93744c27e8bf1c7e111eaef685c2a7",
+    "environment/requirements.lock": "cd7048609f0ef2d03d01abc9211b18236ea8527852f3102cb8a81df14fe1198a",
+    "solution/solve.sh": "a167163eb3a44a4fe96ee388dc2bb3e571724c34030cf35847377265e2808e3c",
+    "solution/golden/golden.patch": "130c3b08221d5bcc475ca7b10e75cce2d5f3d19800c61f813d6a89aeaa2026bf",
+    "tests/calibration/full_score.patch": "130c3b08221d5bcc475ca7b10e75cce2d5f3d19800c61f813d6a89aeaa2026bf",
+    "tests/calibration/equivalent.patch": "3cf3560432db1064d63b564dd81d0e795e9837adb1d047ae10d621fcc74fdc7b",
+    "tests/calibration/guessed.patch": "470a99c7b7d978f5b7260bb7f9c25968f8cb67d86d38bbe7d2800ddd20e92eaa",
+    "tests/calibration/defective.patch": "3efc81859b1ecc08815a5ca66bbe33e96d9201f8efb3241f238c72a8b5b0816d",
+    "solution/variants/variant_a.patch": "a998765d51236f704defbd34b53cb6e35a54b6f65b18378aaad25dcd8a0ef7ea",
+    "solution/variants/variant_b.patch": "257e5a8115a5eda766c4e7f46c20e36aa88263f237cfa21d153a8f5926a5d6e1"
+  }
+}

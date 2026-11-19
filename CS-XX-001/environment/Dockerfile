@@ -1,6 +1,6 @@
 # CS-XX-001: Python 3.12 with the dependencies of the repository snapshot.
 # The snapshot is copied to /workspace/repo; nothing from solution/ or tests/ is in the image.
-FROM python:3.12-slim-bookworm
+FROM python:3.12-slim-bookworm@sha256:935c3c5b12357a7e10caa9c1e6ca5692344d97cf229832ef584be2cec9fc03df
 
 ARG PIP_INDEX_URL=https://pypi.org/simple
 ARG APT_MIRROR=http://deb.debian.org

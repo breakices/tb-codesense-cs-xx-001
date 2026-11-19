@@ -1,31 +1,13 @@
 # 陷阱反例、运行日志与复现率
 
-反例程序和日志在题包的 `solution/counterexamples/`，说明见该目录的 `README.md`。这里是索引和结论。
+1.1.2 的反例在 Linux/amd64 的任务镜像中执行，环境为 Python 3.12.16、Django 5.1.15。每组输入独立运行三次，同组日志的 SHA-256 一致。程序和命令见[反例目录](../CS-XX-001/solution/counterexamples/)。
 
-| 文件 | 内容 |
-|---|---|
-| `ce1_default_rounding.py` | 语言和框架的默认舍入是银行家舍入：`Decimal.quantize` 不传 `rounding`、`DecimalField` 落库 |
-| `ce1_default_rounding.log` | 上一个程序在任务镜像里的输出 |
-| `ce2_draft_consequences.py` | 对一个仓库做七项观测，统计有缺陷的项数 |
-| `ce2_draft_only.log` | 在只做草稿两处改动的仓库上，任务镜像内：defects observed: 7 of 7 |
-| `ce2_reference.log` | 在参考修复上，任务镜像内：defects observed: 0 of 7 |
-| `ce2_upstream_4.2.2_local.log` | 在上游 4.2.2 上，本机运行，仅作旁证：defects observed: 7 of 7 |
-| `repeat_check.log` | 两个程序在任务镜像里各连跑 3 次的输出摘要 |
+| 程序和输入 | 三次观测 | 日志（第 1 次） |
+|---|---|---|
+| ce1，Decimal 和 Django 字段量化 | 六种情形中，默认舍入与 ROUND_HALF_UP 的结果均不同 | [ce1](../CS-XX-001/tests/assets/selfcheck/linux-amd64-1.1.2/ce1-run1.log) |
+| ce2，初始快照加草稿补丁 | 每次复现 7/7 个缺陷 | [草稿](../CS-XX-001/tests/assets/selfcheck/linux-amd64-1.1.2/ce2-guessed-run1.log) |
+| ce2，初始快照加参考补丁 | 每次观测 0/7 个缺陷 | [参考解](../CS-XX-001/tests/assets/selfcheck/linux-amd64-1.1.2/ce2-golden-run1.log) |
 
-## 七项观测
+第二组的七个观测分别检查价格提示、分批结算、购物车显示合计、订单行合计、四位单件税额、含税金额在购物车／订单／页面的一致性，以及搜索索引价格。ce2 的返回码约定为发现缺陷时退出 0，全部观测正常时退出 1。正式判分另走 `tests/test.sh`。
 
-1 到 4 和第 7 项是整改前成立、被草稿的改法破坏的关系：页面各行与合计、订单行与订单合计、分批结算与订单行、价格没变时的提示、搜索索引里的价格与页面上的价格。
-5 和 6 是默认舍入不是四舍五入的两处：第四位小数上的单件税额、分位上的含税金额。
-
-## 复现率
-
-陷阱是确定性的。两个程序在任务镜像里各连跑 3 次，输出逐字相同，触发率 3/3：
-
-```
-ce1 run 1 sha256: 500748aca68998bc
-ce1 run 2 sha256: 500748aca68998bc
-ce1 run 3 sha256: 500748aca68998bc
-ce2 on the draft-only tree, run 1: defects observed: 7 of 7, sha256 42c6a97640a7299a
-ce2 on the draft-only tree, run 2: defects observed: 7 of 7, sha256 42c6a97640a7299a
-ce2 on the draft-only tree, run 3: defects observed: 7 of 7, sha256 42c6a97640a7299a
-```
+[其余重复运行日志](../CS-XX-001/tests/assets/selfcheck/linux-amd64-1.1.2/) · [早期开发期的上游 4.2.2 本地对照](../CS-XX-001/solution/counterexamples/ce2_upstream_4.2.2_local.log)

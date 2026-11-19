@@ -3,7 +3,7 @@ artifacts = ["/logs/verifier/result.json", "/logs/verifier/reward.txt"]
 
 [task]
 name = "codesense/cs-xx-001"
-version = "1.1.1"
+version = "1.1.2"
 description = "含税金额精度整改：在 django-oscar 快照上修掉两个对账症状，并守住依赖同一批金额的其他环节，单轮作答，单元测试判分。"
 
 [[task.authors]]
@@ -37,7 +37,7 @@ challenge_premise_is_false = true
 expert_minutes = 150
 code_origin = "opensource"
 code_license = "BSD-3-Clause"
-version = "1.1.1"
+version = "1.1.2"
 author = "XX"
 source_note = "代码是 django-oscar 的真实提交 4dc248a6382cbc26d95644925467e143fa6debcf（2025-02-19，4.0 之后的开发分支），未做改写。题目以该项目真实的舍入问题和公开维护历史为基础：2025-03-07 的 #4448 先在购物车合计等处补了舍入，2025-04-09 的 #4455 又修改了税率策略、行金额、运费折扣中的同类问题；到 4.2.2（a5ed3c9c1）为止，价格变动提示误报、订单行与价格明细差一分等下游问题仍然存在，反例程序可以复现。搜索索引价格和部分下游验收是基于真实金额依赖关系补充的评测要求，不宣称它们全部来自上游提交。快照取在第一次修复之前。"
 prompt = '''
@@ -58,7 +58,7 @@ prompt = '''
 财务月结对账时报了两个问题：
 
 1. 低价商品批量购买时税额丢失。单价 0.01、数量 100、税率 20%，税额应为 0.20，系统算出 0.00。
-2. 购物车合计出现超过两位小数的金额。单价 9.99、数量 3，叠加一个 15% 的促销，购物车合计里出现了 30.5745 这样的数。
+2. 购物车合计出现超过两位小数的金额。单价 9.99、数量 3，叠加一个 15% 的促销，当折扣记在含税金额上时，含税合计里出现了 30.5745 这样的数。
 
 ## 已确定的整改方向
 
@@ -67,7 +67,9 @@ prompt = '''
 1. 单件税额和含税单价在系统内部保留 4 位小数，不再提前舍入到分。
 2. 金额在对外时才舍入到分。所有舍入都用四舍五入，即 `ROUND_HALF_UP`。
 
-这里的金额边界需要区分。策略计算得到的单件中间价可以保留四位小数。购物车和订单对外金额、订单持久化金额、页面展示金额、搜索索引价格以及订单价格明细都使用分的精度。新建购物车行记录的价格按分保存，已有购物车行的历史记录价也按分比较价格变动。已有订单的总额、订单行、价格明细和已结算金额按历史记录继续完成，不重新改写已经保存的金额。`OSCAR_OFFERS_INCL_TAX` 为真时促销按含税金额计算，为假时按不含税金额计算，两种路径都必须遵守相同的分位舍入和对账关系。
+顾客看到的价格、据以筛选或排序商品的价格，以及购物车合计、订单和价格明细中的账面金额都以分为单位。分批发货时，同一订单行的数量和金额须能与其价格明细对账；正价发货的每一批只能收取非负金额，累计收款不能超过该行的应收金额，全数发货后两者相等。尾差可以分配到不同批次。
+
+商品促销沿用仓库原有的业务口径。英国定价策略用含税有效单价计算百分比折扣额。对于该商品促销，`OSCAR_OFFERS_INCL_TAX` 控制算出的折扣记在含税还是不含税的行金额上。两个配置下都要对账。
 
 ## 同事的方案草稿
 
@@ -85,9 +87,8 @@ prompt = '''
 
 改完之后要守住两条底线：
 
-- 系统里凡是说的是同一笔钱的地方，就必须是同一个数；本次改动涉及的分项必须加起来等于它们的合计。对本次改动不涉及的既有促销折扣记录，不要求改变其历史的一分钱差异。
-- 上线前已经在系统里的购物车要能照常走完后面的流程，历史记录价按分的精度继续用于兼容性比较。
-- 上线前已经在系统里的订单要能照常走完后面的流程，已经记下的总额、订单行、价格明细和已结算金额不变。
+- 系统中表示同一笔钱的地方必须一致，分项合计等于对应总额。各行的分位尾差可以按一致的规则分摊。
+- 升级要兼容已有数据。未下单购物车继续按现行策略结算，保留加购时记录的历史单价。价格变动提示比较当时与现在顾客看到的含税单价，只有两者按分确实不同时才提示，包括因本次升级而变动一分的情形。已下单订单继续按原记录结算，保留历史订单总额、订单行、价格明细和已收款。
 
 约束：
 
@@ -130,10 +131,10 @@ targets_badpattern_count = 14
 "边界与异常" = ["test_net_total_is_cents_when_tax_is_not_known", "test_fully_discounted_basket_is_zero_not_negative", "test_empty_basket_totals_are_zero", "test_free_shipping_after_discount_has_no_net_charge"]
 
 [metadata.expert_design_notes]
-intent = "题面只给两个症状、整改方向和两条底线，不列出要改哪些地方。草稿覆盖症状所在的两处，照做以后症状消失。要拿到分，模型必须自己发现哪些环节依赖这批金额，并判断自己的改法会不会破坏它们。隐藏单测里有 25 条在未改动的快照上本来就通过，其中 11 条会被草稿的改法破坏。"
-trap_design = "陷阱分两类。第一类是草稿里三个可判定的错误说法：quantize 不带 rounding 时是银行家舍入；在合计处统一舍入是先加总再舍入，分项加不回合计；下游不会自然变对。第二类是修症状带来的连锁后果，题面不点名：订单的价格明细按分保存单价，分批发货的结算按明细逐件累加，单价变成四位小数后各批之和不再等于订单行金额；购物车行直接比较四位小数的现价和两位小数的记录价，价格没变也提示变动；DecimalField 落库和 Babel 展示各自按银行家舍入量化，与合计不一致；搜索索引直接取四位小数的单价，价格筛选和排序用的数不再是页面上显示的价格，这一处与购物车和订单没有调用关系。这些后果在上游项目的真实修复里同样存在，反例程序可以复现。上线前已有的订单是另一层：如果改的是结算逻辑而不是明细，必须保证已结算了一部分的旧订单仍按原明细结清。"
-boundary = "不纳入断言的行为：（1）商品促销的折扣算法及其在各行上用精确值还是取整值；（2）进位点上先保不含税金额还是先保税额；（3）多行时合计与各行如何取得一致，逐行舍入或把差额分摊到行上都接受；（4）分批结算每一批的具体金额，只要求是分、各批之和等于订单行金额、旧订单按原明细结清；（5）多件商品的价格明细如何拆分；（6）折扣记录与各行折扣之和的一分钱差异；（7）内部函数返回四位还是两位小数；（8）自定义金额格式与零小数位币种的展示；（9）是否新增辅助函数、命名、迁移；（10）仓库自带测试是否通过。"
-challenge_discrimination = "草稿区分两类行为。一类模型把草稿当作范围，照做两处或在两处附近小修：症状类单测通过，但原来通过的 11 条被破坏，另有 8 条仍不通过。另一类模型把题面的两条底线当作范围，沿着金额的去向逐个环节核对，并回头检查自己的改动对已有数据的影响。其中“quantize 默认四舍五入”区分是否核对语言语义（U7、U8、U13、U14），“在合计处统一舍入”区分是否理解分项与合计的关系（U15 到 U19），“下游自然就对”区分是否追踪到结算、价格提示、落库、展示和搜索索引（U22 到 U24、U27、U9、U10、U12、U39 到 U41）。"
+intent = "题面说明两个症状、顾客可见的金额口径及历史记录兼容规则。草稿覆盖症状所在的两处，照做以后症状消失。要拿到分，模型必须自己发现哪些环节依赖这批金额，并判断自己的改法会不会破坏它们。隐藏单测里有 23 条在未改动的快照上本来就通过，其中 10 条会被草稿的改法破坏。"
+trap_design = "陷阱分两类。第一类是草稿里三个可判定的错误说法：quantize 不带 rounding 时是银行家舍入；在合计处统一舍入是先加总再舍入，分项加不回合计；下游不会自然变对。第二类是修症状带来的连锁后果：订单的价格明细按分保存单价，分批发货的结算按明细逐件累加，单价变成四位小数后各批之和不再等于订单行金额；购物车行直接比较四位小数的现价和两位小数的记录价，价格没变也提示变动；DecimalField 落库和 Babel 展示各自按银行家舍入量化，与合计不一致；搜索索引直接取四位小数的单价，价格筛选和排序用的数不再是页面上显示的价格，这一处与购物车和订单没有调用关系。这些后果在上游项目的真实修复里同样存在，反例程序可以复现。上线前已有的订单是另一层：如果改的是结算逻辑而不是明细，必须保证已结算了一部分的旧订单仍按原明细结清。"
+boundary = "不纳入断言的行为：（1）商品促销的折扣算法及其在各行上用精确值还是取整值；（2）进位点上先保不含税金额还是先保税额；（3）多行时合计与各行如何取得一致，逐行舍入或把差额分摊到行上都接受；（4）分批结算每一批的具体金额，每批为非负分位金额，累计不超订单行应收，最后结清；历史订单依据原有明细结算；（5）多件商品如何分组及分摊余数，由实现决定；明细数量、税前和含税金额须与订单行对账；（6）折扣记录与各行折扣之和的一分钱差异；（7）辅助计算的表示方式；定价策略对外返回的单件税额和含税单价明确受四位精度要求约束；（8）自定义金额格式与零小数位币种的展示；（9）是否新增辅助函数、命名、迁移；（10）仓库自带测试是否通过。"
+challenge_discrimination = "草稿区分两类行为。一类模型把草稿当作范围，照做两处或在两处附近小修：症状类单测通过，但原来通过的 10 条被破坏，另有 10 条原有失败仍未解决。另一类模型把题面的两条底线当作范围，沿着金额的去向逐个环节核对，并回头检查自己的改动对已有数据的影响。其中“quantize 默认四舍五入”区分是否核对语言语义（U7、U8、U13、U14），“在合计处统一舍入”区分是否理解分项与合计的关系（U15 到 U19），“下游自然就对”区分是否追踪到结算、价格提示、落库、展示和搜索索引（U22 到 U24、U27、U9、U10、U12、U39 到 U41）。"
 
 [metadata.verification]
 human_required = false
@@ -144,21 +145,21 @@ judge_type = "unit_test"
 
 [[metadata.model_failure_modes]]
 id = "FM1"
-description = "搜索索引里的商品价格没有处理。单价保留四位小数以后，ProductIndex.prepare_price 写进索引的是 1.1880，商品页显示的是 1.19。价格筛选、价格区间和按价格排序用的数与顾客看到的数不再一致。答卷改了定价、购物车、订单、运费和展示，没有打开 search 应用。"
+description = "搜索索引里的商品价格没有处理。单价保留四位小数以后，ProductIndex.prepare_price 写进索引的是 1.1880，商品页显示的是 1.19。价格筛选、价格区间和按价格排序用的数与顾客看到的数不再一致。历史答卷修改了定价、购物车、订单、运费和展示，补丁未覆盖搜索索引价格。"
 hit_feature = "改一查十：与症状没有调用关系、仓库自带测试不覆盖的远处使用点"
 model = "opus5.5"
 collected_on = "2026-11-18"
 unit_tests = ["U39"]
-evidence = ["2026-11-18 采集，模型 claude-opus-5-5，Claude Code 2.1.318，任务镜像内盲测。5 份有效答卷中的 4 份：tests/assets/baseline_runs/opus5.5/ 下 rs41-opus55-v5-02、rs41-opus55-v5-04、rs41-opus55-v5b-01、rs41-opus55-v5b-02，四份 answer.patch 都不包含 src/oscar/apps/search/search_indexes.py", "同一批的第 5 份答卷 rs41-opus55-v5-05 自己改了这个文件，注释为 Index the price as shown to customers (rounded to whole pence)", "只做草稿两处改动的 tests/calibration/guessed.patch 同样触发"]
+evidence = ["2026-11-18 采集，模型 claude-opus-5-5，Claude Code 2.1.318，任务镜像内盲测。原 38 项版生成的 5 份答卷中，按 41 项版回放时有 4 份触发 U39：tests/assets/baseline_runs/opus5.5/ 下 rs41-opus55-v5-02、rs41-opus55-v5-04、rs41-opus55-v5b-01、rs41-opus55-v5b-02，四份 answer.patch 都不包含 src/oscar/apps/search/search_indexes.py", "同一批的第 5 份答卷 rs41-opus55-v5-05 自己改了这个文件，注释为 Index the price as shown to customers (rounded to whole pence)", "只做草稿两处改动的 tests/calibration/guessed.patch 同样触发"]
 
 [[metadata.model_failure_modes]]
 id = "FM2"
-description = "运费的百分比折扣仍按默认的银行家舍入取整。答卷没有打开 offer/benefits.py，ShippingPercentageDiscountBenefit.shipping_discount 里的 quantize(D(\"0.01\")) 保持原样。运费 2.50 的 25% 折扣额算出 0.62，应为 0.63。"
+description = "运费的百分比折扣仍按默认的银行家舍入取整。历史答卷未修改 offer/benefits.py，ShippingPercentageDiscountBenefit.shipping_discount 里的 quantize(D(\"0.01\")) 保持原样。运费 2.50 的 25% 折扣额算出 0.62，应为 0.63。"
 hit_feature = "改一查十：同一条舍入规则散落在多个模块，漏掉离症状较远的一处"
 model = "opus5.5"
 collected_on = "2026-11-18"
 unit_tests = ["U14"]
-evidence = ["2026-11-18 采集，模型 claude-opus-5-5，Claude Code 2.1.318，任务镜像内盲测。5 份有效答卷中的 2 份：rs41-opus55-v5-02 与 rs41-opus55-v5b-02，result.json 中 U14 的实际输出为 assert Decimal('0.62') == Decimal('0.63')", "两份 answer.patch 都不包含 src/oscar/apps/offer/benefits.py", "第 3 版题面下的 opus55-v3-04、opus55-v3-05 也是同一处，见 tests/assets/earlier_calibration/"]
+evidence = ["2026-11-18 采集，模型 claude-opus-5-5，Claude Code 2.1.318，任务镜像内盲测。原 38 项版 5 份答卷中的 2 份：rs41-opus55-v5-02 与 rs41-opus55-v5b-02，result.json 中 U14 的实际输出为 assert Decimal('0.62') == Decimal('0.63')", "两份 answer.patch 都不包含 src/oscar/apps/offer/benefits.py", "第 3 版题面下的 opus55-v3-04、opus55-v3-05 也是同一处，见 tests/assets/earlier_calibration/"]
 
 [[metadata.model_failure_modes]]
 id = "FM3"
@@ -167,7 +168,7 @@ hit_feature = "修症状的改动破坏题面没有点名的下游环节"
 model = "opus5.5；另有 haiku、sonnet、opus 档位的本机试答"
 collected_on = "2026-11-17 至 2026-11-18"
 unit_tests = ["U21", "U22", "U23", "U24", "U41"]
-evidence = ["2026-11-18 采集，模型 claude-opus-5-5，Claude Code 2.1.318，任务镜像内盲测，第 3 版题面：5 份答卷全部如此，见 tests/assets/earlier_calibration/opus55-v3-0*.result.json，U22 的实际输出为 assert Decimal('1.00') == Decimal('1.20')", "2026-11-17 采集，本机 Claude Code 子代理试答，题面初稿：mac-probe-haiku、mac-probe-sonnet、mac-probe-opus 三份都未通过 U22 到 U24 与 U41，mac-probe-opus 另未通过 U21", "当前题面下的 5 份有效答卷都处理了这一处"]
+evidence = ["2026-11-18 采集，模型 claude-opus-5-5，Claude Code 2.1.318，任务镜像内盲测，第 3 版题面：5 份答卷全部如此，见 tests/assets/earlier_calibration/opus55-v3-0*.result.json，U22 的实际输出为 assert Decimal('1.00') == Decimal('1.20')", "2026-11-17 采集，本机 Claude Code 子代理试答，题面初稿：mac-probe-haiku、mac-probe-sonnet、mac-probe-opus 三份都未通过 U22 到 U24 与 U41，mac-probe-opus 另未通过 U21", "旧版 38 项题面下存档的 5 份答卷均处理了该情形"]
 
 [[metadata.model_failure_modes]]
 id = "FM4"
@@ -218,7 +219,7 @@ criterion_necessity = "Explicit"
 judge_type = "unit_test"
 targets_badpattern = false
 change_points = "CP1"
-evidence_required = "断言 strategy.UK().fetch_for_product(...).price 的 tax 与 incl_tax（按四位四舍五入比较）。"
+evidence_required = "直接比较 fetch_for_product 返回的税额与含税价和预期 Decimal 值。"
 
 [[metadata.ut_index]]
 id = "U3"
@@ -249,12 +250,12 @@ id = "U5"
 ut_name = "test_basket_totals_are_cents_with_percentage_offer_default_setting"
 turn = "turn1"
 dimension = "语义正确性"
-description = "默认促销口径下 3 件 9.99 打 85 折：不含税合计 24.58，含税合计是分，含税减不含税等于税额合计。"
+description = "默认设置下 3 件 £9.99 打 85 折，沿用英国策略的含税有效单价计算折扣，折扣从不含税行额扣除，税前合计 £24.58。"
 criterion_necessity = "Explicit"
 judge_type = "unit_test"
 targets_badpattern = false
 change_points = "CP4"
-evidence_required = "断言 total_excl_tax 的值、total_incl_tax 已是分、三个合计的差值关系。"
+evidence_required = "按原促销算法得到 £5.3946 的折扣。检查 £29.97 扣减折扣后的分位合计，并核对含税合计减税前合计等于总税额。"
 
 [[metadata.ut_index]]
 id = "U6"
@@ -266,31 +267,31 @@ criterion_necessity = "Implicit"
 judge_type = "unit_test"
 targets_badpattern = false
 change_points = "CP1+CP3"
-evidence_required = "断言 strategy.UK().fetch_for_parent(...).price 的 tax 与 incl_tax。"
+evidence_required = "直接比较 fetch_for_parent 返回的税额与含税价和预期 Decimal 值。"
 
 [[metadata.ut_index]]
 id = "U7"
 ut_name = "test_unit_tax_rounds_half_up_at_the_fourth_place"
 turn = "turn1"
 dimension = "单轮反幻觉"
-description = "17.5% 税率、单价 0.03：税额 0.00525 在第四位是进位点，四舍五入为 0.0053，银行家舍入为 0.0052。"
+description = "税前 £0.03、税率 17.5% 的单件税额取四位为 £0.0053，含税单价 £0.0353。买 200 件时税额 £1.06，含税合计 £7.06。"
 criterion_necessity = "Explicit"
 judge_type = "unit_test"
 targets_badpattern = false
 change_points = "CP2"
-evidence_required = "断言 FixedRateTax 子类的 price.tax；失败输出 0.0052 即坐实草稿里“quantize 默认四舍五入”的错误说法。"
+evidence_required = "直接比较策略返回的数值，再核对 200 件购物车。保留未经舍入的 £0.00525 会使含税合计成为 £7.05。"
 
 [[metadata.ut_index]]
 id = "U8"
 ut_name = "test_parent_unit_tax_rounds_half_up_at_the_fourth_place"
 turn = "turn1"
 dimension = "改一查十完备性"
-description = "与 U7 相同的进位点，经父商品报价路径：税额应为 0.0053。"
+description = "同一进位点经父商品报价路径，直接返回的单件税额为 £0.0053，含税单价为 £0.0353。"
 criterion_necessity = "Explicit"
 judge_type = "unit_test"
 targets_badpattern = false
 change_points = "CP3"
-evidence_required = "断言 fetch_for_parent(...).price.tax。"
+evidence_required = "直接比较父商品报价的 tax 和 incl_tax；对比输入为子商品税前 £0.03、税率 17.5%。"
 
 [[metadata.ut_index]]
 id = "U9"
@@ -453,36 +454,36 @@ id = "U22"
 ut_name = "test_batches_settle_to_the_order_line_amount"
 turn = "turn1"
 dimension = "单轮反幻觉"
-description = "100 件 0.01 下单后按 30 件、70 件两批发货结算：两笔结算金额都是分，合计等于订单行金额。"
+description = "检验两种非均匀分批：100 件 £0.01 分 30、70 件，30 件 £0.03 分 29、1 件。逐笔结算与存储的订单行及明细对账。"
 criterion_necessity = "Implicit"
 judge_type = "unit_test"
 targets_badpattern = true
 change_points = "CP15"
-evidence_required = "通过 EventHandler.calculate_payment_event_subtotal 取每批金额并记录事件，断言求和等于 Line.line_price_incl_tax；不处理时输出 1.00 对 1.20。"
+evidence_required = "按数量核对存储明细的件数、含税与不含税总额；逐批检查非负分位金额、累计不超应收，末批后累计额等于订单行含税金额。"
 
 [[metadata.ut_index]]
 id = "U23"
 ut_name = "test_unit_by_unit_settlement_adds_up_to_the_order_line_amount"
 turn = "turn1"
 dimension = "改一查十完备性"
-description = "7 件 0.99 下单后逐件结算：七笔金额都是分，合计等于订单行金额。"
+description = "7 件 £0.99 按件结算。七笔金额均为非负分位数，累计收款不超过订单行，最终结清。"
 criterion_necessity = "Implicit"
 judge_type = "unit_test"
 targets_badpattern = true
 change_points = "CP15"
-evidence_required = "同 U22 的方式，断言求和关系。"
+evidence_required = "按数量核对存储明细的件数、含税与不含税总额；逐批检查非负分位金额、累计不超应收，末批后累计额等于订单行含税金额。"
 
 [[metadata.ut_index]]
 id = "U24"
 ut_name = "test_settlement_of_a_partly_discounted_line_adds_up"
 turn = "turn1"
 dimension = "改一查十完备性"
-description = "含税口径下 5 件 3.33、最多 3 件享受九折，下单后按 2 件、3 件结算：结算金额之和等于订单行金额。"
+description = "5 件 £3.33，其中至多三件享九折，分 2、3 件结算。订单行、折扣分组的价格明细与分批收款对账。"
 criterion_necessity = "Implicit"
 judge_type = "unit_test"
 targets_badpattern = true
 change_points = "CP15"
-evidence_required = "同 U22 的方式，断言求和关系。"
+evidence_required = "按数量核对存储明细的件数、含税与不含税总额；逐批检查非负分位金额、累计不超应收，末批后累计额等于订单行含税金额。"
 
 [[metadata.ut_index]]
 id = "U25"
@@ -513,24 +514,24 @@ id = "U27"
 ut_name = "test_no_price_change_warning_when_the_price_did_not_change"
 turn = "turn1"
 dimension = "单轮反幻觉"
-description = "直接写入历史的两位小数购物车记录价后，商品价格没有变化时，从数据库读出的购物车行不得提示价格变动。"
+description = "读取历史购物车行时，若记录价和当前向顾客显示的价格均为 £1.19，购物车不提示价格变化。"
 criterion_necessity = "Implicit"
 judge_type = "unit_test"
 targets_badpattern = true
 change_points = "CP8"
-evidence_required = "先直接写入历史的两位小数 price_incl_tax，再 reload BasketLine，断言 Line.get_warning() 为 None；只按草稿改 exponent 时会输出“价格从 £1.19 降到 £1.19”的提示。"
+evidence_required = "直接建立旧两位记录价的购物车行，从数据库读回并检查 get_warning() 和原始记录价。"
 
 [[metadata.ut_index]]
 id = "U28"
 ut_name = "test_price_change_warning_is_still_reported_for_a_real_change"
 turn = "turn1"
 dimension = "回归安全"
-description = "直接写入历史的两位小数购物车记录价后，库存记录价格从 0.99 调到 1.09 时，购物车行仍须给出价格变动提示。"
+description = "旧购物车的当前显示价高于历史记录价时给出提示。覆盖库存实际调价，以及存货未调价但旧 £0.70 变为可见 £0.71 的进位点。"
 criterion_necessity = "Implicit"
 judge_type = "unit_test"
 targets_badpattern = false
 change_points = "CP8"
-evidence_required = "断言 Line.get_warning() 非空。"
+evidence_required = "读回持久化旧行，比较两种涨价路径的价格提示；检查旧记录保持原值。"
 
 [[metadata.ut_index]]
 id = "U29"
@@ -658,7 +659,7 @@ ut_name = "test_indexed_price_is_the_price_shown"
 turn = "turn1"
 dimension = "改一查十完备性"
 description = "搜索索引里的商品价格等于商品页显示的价格：0.99 按 20% 是 1.19，0.60 按 17.5% 是 0.71；父商品相同。价格筛选、价格区间和按价格排序都以索引里的数为准。"
-criterion_necessity = "Implicit"
+criterion_necessity = "Explicit"
 judge_type = "unit_test"
 targets_badpattern = true
 change_points = "CP16"
@@ -669,7 +670,7 @@ id = "U40"
 ut_name = "test_no_price_change_warning_at_a_tie"
 turn = "turn1"
 dimension = "改一查十完备性"
-description = "含税单价在分位是进位点或多于两位小数时，价格没有变化的购物车行同样不得提示价格变动。"
+description = "新建购物车在分位进位点按当前口径保存记录价，同价重新读取时不发出价格变动提示。"
 criterion_necessity = "Implicit"
 judge_type = "unit_test"
 targets_badpattern = true
@@ -681,10 +682,10 @@ id = "U41"
 ut_name = "test_batches_settle_to_the_order_line_amount_at_a_tie"
 turn = "turn1"
 dimension = "改一查十完备性"
-description = "17.5% 税率、3 件 0.60 下单后按 1 件、2 件两批结算：两笔金额都是分，合计等于订单行金额。"
+description = "3 件 £0.60 按 17.5% 计税，按 1、2 件分两批；含税单价在分位进位点时，分批收款和存储明细仍满足订单行约束。"
 criterion_necessity = "Implicit"
 judge_type = "unit_test"
 targets_badpattern = true
 change_points = "CP15"
-evidence_required = "同 U22 的方式，断言求和关系。"
+evidence_required = "按数量核对存储明细的件数、含税与不含税总额；逐批检查非负分位金额、累计不超应收，末批后累计额等于订单行含税金额。"
 

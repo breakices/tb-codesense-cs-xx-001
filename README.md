@@ -1,15 +1,10 @@
-# CS-XX-001
+# CS-XX-001 — Tax-inclusive money precision
 
-Private Code Sense benchmark package for the tax-inclusive money precision task.
+Version **1.1.2** is a Code Sense task built on a BSD-licensed django-oscar snapshot. It asks an engineer to reconcile prices across a basket, checkout and order settlement after changing the precision of unit tax.
 
-The package contains the Harbor task layout, reference solution, calibration patches, variants, counterexamples, and external review material. The current package version is 1.1.1.
+This public repository is the **author package**. For a blind evaluation, supply the instructions and starter repository in a separate workspace. Keep the verifier, solutions, past answers and this public repository outside the agent’s filesystem and network reach. Mount the tests after the agent exits. [Instructions](CS-XX-001/instruction.md) · [Starter repository](CS-XX-001/environment/workspace/repo/) · [Verifier entry point](CS-XX-001/tests/test.sh)
 
-Current local verification
+The revised verifier checks the unit tax before further rounding, protects against overcharging within a series of payments, and covers the customer-visible price-change rule for old baskets. The UK offer base continues to follow the existing strategy.
+On Linux/amd64, three independent verifier runs per control gave 41/41 for the reference, full-score, equivalent and two variant patches. The unmodified starter passed 23/41, the defective patch 31/41 and the draft-only patch 21/41. Each of those three earned reward 0. [Per-run evidence](CS-XX-001/tests/assets/selfcheck/linux-amd64-1.1.2/SUMMARY.json)
 
-- Golden: 41/41
-- NOP: 25/41
-- Variant A/B: 41/41
-- Defective: 31/41
-- Guessed: 22/41
-
-Model calibration remains marked `calibration_incomplete`. Historical 38-test runs and the post-hoc U39 issue are documented in the external material.
+Model calibration is **incomplete**. Versions 1.1.1 and 1.1.2 have no formal rollouts. Historical runs for earlier versions, including the retrospective rescore of previously seen answers, are listed in the [baseline report](CS-XX-001-external/06_baseline.md).

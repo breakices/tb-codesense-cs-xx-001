@@ -4,9 +4,9 @@
 
 | 实现 | 三次得分 | 三次通过单测 | 证据 |
 |---|---|---|---|
-| variant_a.patch | [1, 1, 1] | [41, 41, 41] | tests/assets/selfcheck/linux-amd64/variant_a-run*.json |
-| variant_b.patch | [1, 1, 1] | [41, 41, 41] | tests/assets/selfcheck/linux-amd64/variant_b-run*.json |
-| equivalent.patch | [1, 1, 1] | [41, 41, 41] | tests/assets/selfcheck/linux-amd64/equivalent-run*.json |
+| variant_a.patch | [1, 1, 1] | [41, 41, 41] | tests/assets/selfcheck/linux-amd64-1.1.2/variant_a-run*.json |
+| variant_b.patch | [1, 1, 1] | [41, 41, 41] | tests/assets/selfcheck/linux-amd64-1.1.2/variant_b-run*.json |
+| equivalent.patch | [1, 1, 1] | [41, 41, 41] | tests/assets/selfcheck/linux-amd64-1.1.2/equivalent-run*.json |
 
 ## variant_a：沿用上游修复的写法
 
@@ -26,9 +26,8 @@
 - 价格明细用 `allocate` 把订单行金额摊成至多两种相差一分的单价。
 - 展示过滤器用 `localcontext` 让 Babel 以四舍五入量化。
 
-## equivalent：内部全部用精确值，结算时补差
+## equivalent：按折扣组占比分配订单行金额
 
-- 不新增任何舍入函数，舍入都写成内联的 quantize，显式传 ROUND_HALF_UP。
-- 行金额属性返回未舍入的精确值，合计逐行舍入后相加，税额合计定义为含税合计减不含税合计。
-- 价格明细不拆分，仍按单价逐条舍入。改的是 `EventHandler.calculate_payment_event_subtotal`：结清一个订单行的那一批，取订单行金额减去此前各批按明细算出的金额。
-- 等价的依据：每批金额仍是分；各批之和恒等于订单行金额；上线前已有的订单，明细本来就加得回行金额，补差为零，结算结果与原来相同。
+- 固定税率策略按四位小数取单件税额。折后行金额保留计算精度，购物车按行舍入后求和，含税与不含税合计之差是税额合计。
+- 新订单保留各折扣组的顺序。按各组占行金额的比例计算累计份额，取整到分后用相邻份额之差作为每组金额，含税与不含税分别计算。
+- 组内将整数分均摊到每件，余下的分加在最后几件上，以相同单价合并明细。每批发货按已存明细结算。对正价订单，每一批均为非负金额，各批合计与订单行一致。已有订单仍按原明细结算。

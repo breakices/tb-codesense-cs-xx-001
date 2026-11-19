@@ -115,6 +115,19 @@ def basket_with(price, quantity, strat=None):
     return basket, product
 
 
+def stored_basket(net, gross):
+    """Persist the historical basket line without invoking current add_product."""
+    basket = make_basket()
+    product = make_product(net)
+    record = StockRecord.objects.get(product=product)
+    basket.lines.create(
+        line_reference="%s_%s" % (product.pk, record.pk),
+        product=product, stockrecord=record, quantity=1, price_currency="GBP",
+        price_excl_tax=D(net), price_incl_tax=D(gross),
+    )
+    return basket, product
+
+
 def basket_with_products(prices, strat=None):
     """A basket with one line of quantity one for each given price."""
     basket = make_basket(strat)

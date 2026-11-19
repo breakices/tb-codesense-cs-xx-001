@@ -2,10 +2,11 @@
 # Verifier entry for CS-XX-001.  Harbor mounts this directory at /tests after
 # the agent has finished and runs this script as root.  The reward is 1 when
 # every unit test listed in ut_index.json passes on /workspace/repo, else 0.
-set -u
+set -eu
 mkdir -p /logs/verifier
 cd /tests || exit 1
-python3 -B /tests/score.py --repo /workspace/repo --out /logs/verifier/result.json > /logs/verifier/score.stdout 2> /logs/verifier/score.stderr
+rm -f /logs/verifier/reward.txt
+python3 -B /tests/score.py --repo /workspace/repo --out /logs/verifier/result.json --log-dir /logs/verifier > /logs/verifier/score.stdout 2> /logs/verifier/score.stderr
 python3 -B - <<'PY'
 import json
 try:

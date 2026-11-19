@@ -4,6 +4,7 @@ task: CS-XX-001
 reference_patch: solution/golden/golden.patch
 reference_answer: solution/golden/answer.md
 snapshot: django-oscar 4dc248a6382cbc26d95644925467e143fa6debcf
+ablation_evidence: tests/assets/selfcheck/ablation-1.1.2.json
 # Only the required entries are guarded by the hidden-test contract. The
 # reference-only entries document implementation choices retained by Golden.
 required_change_point_ids: [CP1, CP2, CP3, CP4, CP8, CP9, CP10, CP11, CP13, CP15, CP16]
@@ -24,7 +25,7 @@ change_points:
     lines: [289]
     answer_section: "answer.md 第 2 节 CP2"
     change: "quantize 显式使用 ROUND_HALF_UP。"
-    why: "quantize 不传 rounding 时用的是当前 decimal 上下文的舍入方式，默认 ROUND_HALF_EVEN。0.03 x 17.5% = 0.00525 会得到 0.0052。"
+    why: "£0.03 × 17.5% 的单件税额应直接返回 £0.0053。忽略量化会使 200 件的含税合计从 £7.06 变为 £7.05。"
     required: true
     unit_tests: [U7]
   - id: CP3
@@ -147,7 +148,7 @@ change_points:
     lines: [28, 38, 347]
     answer_section: "answer.md 第 2 节 CP15"
     change: "订单行的价格明细不再逐条把单价舍入到分，而是把订单行金额按分摊到每一件上：同组的件拿相同的单价，除不尽的几分钱加在前几件上，各条明细的金额之和恰好等于订单行金额。"
-    why: "分批发货的结算金额由 EventHandler.calculate_payment_event_subtotal 按价格明细逐件累加。单价 0.012 落成 0.01 后，100 件结算出 1.00，而订单行是 1.20。结算逻辑本身不动，上线前已有订单的明细和已结算的批次因此不受影响。"
+    why: "分批发货的结算金额由 EventHandler.calculate_payment_event_subtotal 按价格明细逐件累加。单价 0.012 落成 0.01 后，100 件结算出 1.00，而订单行是 1.20。若先多收再在末批补负数，也会违反逐批结算约束。结算逻辑本身不动，上线前已有订单的明细和已结算的批次因此不受影响。"
     required: true
     unit_tests: [U21, U22, U23, U24, U41]
   - id: CP16

@@ -1,6 +1,6 @@
 # 陷阱反例
 
-两个程序都是确定性的，不依赖时间、随机数和网络。下面的日志是在任务镜像里运行得到的。
+两个程序在离线环境使用固定输入。下方示例保留此前在任务镜像和上游 4.2.2 的记录。1.1.2 的第 5 项观测直接读取定价策略的原始税额；本次 Linux 输出见 [CE1](../../tests/assets/selfcheck/linux-amd64-1.1.2/ce1-run1.log)、[CE2 草稿](../../tests/assets/selfcheck/linux-amd64-1.1.2/ce2-guessed-run1.log) 和 [CE2 Golden](../../tests/assets/selfcheck/linux-amd64-1.1.2/ce2-golden-run1.log)。
 
 ## ce1_default_rounding.py
 

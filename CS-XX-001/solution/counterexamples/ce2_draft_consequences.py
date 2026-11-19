@@ -81,7 +81,7 @@ report("order lines / order total", "%s / %s" % (" + ".join(str(x) for x in stor
 
 # 5. unit tax at a tie in the fourth place (17.5% of 0.03 = 0.00525)
 tax = h.ReducedRate().fetch_for_product(h.make_product("0.03")).price.tax
-report("unit tax of 0.03 at 17.5%", tax, h.four_places(tax) != D("0.0053"))
+report("unit tax of 0.03 at 17.5%", tax, tax != D("0.0053"))
 
 # 6. gross price at a tie in the cent (0.60 at 17.5% = 0.7050): basket, stored line, page
 basket, _ = h.basket_with("0.60", 1, h.ReducedRate())

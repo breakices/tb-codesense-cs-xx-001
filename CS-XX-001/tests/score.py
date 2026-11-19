@@ -20,6 +20,8 @@ from the network, and the result does not depend on time or random numbers.
 import argparse
 import json
 import os
+from pathlib import Path
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -29,7 +31,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 TEST_FILE = "test_money_contract.py"
 
 
-def run_pytest(repo, python):
+def run_pytest(repo, python, log_dir=None):
     src = os.path.join(os.path.abspath(repo), "src")
     if not os.path.isdir(os.path.join(src, "oscar")):
         raise SystemExit("no src/oscar under %s" % repo)
@@ -54,6 +56,12 @@ def run_pytest(repo, python):
             "--junitxml", report,
         ]
         proc = subprocess.run(cmd, cwd=HERE, env=env, capture_output=True, text=True)
+        if log_dir is not None:
+            log_dir.mkdir(parents=True, exist_ok=True)
+            (log_dir / "pytest.stdout").write_text(proc.stdout, encoding="utf-8")
+            (log_dir / "pytest.stderr").write_text(proc.stderr, encoding="utf-8")
+            if os.path.isfile(report):
+                shutil.copyfile(report, log_dir / "junit.xml")
         cases = {}
         if os.path.exists(report):
             for case in ET.parse(report).getroot().iter("testcase"):
@@ -79,23 +87,14 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--repo", required=True)
     parser.add_argument("--out")
+    parser.add_argument("--log-dir", type=Path, help="retain the full pytest streams and JUnit report")
     parser.add_argument("--python", default=sys.executable)
     args = parser.parse_args()
 
     index = json.load(open(os.path.join(HERE, "ut_index.json"), encoding="utf-8"))
-    proc, cases = run_pytest(args.repo, args.python)
+    proc, cases = run_pytest(args.repo, args.python, args.log_dir)
 
     listed = {entry["ut_name"] for entry in index}
-    collection_error = None
-    if cases and not (listed & set(cases)):
-        # The test module could not be imported against this repository (for
-        # example the answer left a syntax or import error in the package).
-        # Every test then counts as an error of the answer.
-        broken = [e for s, e in cases.values() if s == "error"]
-        if broken:
-            collection_error = "test module could not be loaded: " + broken[0]
-            cases = {name: ("error", collection_error) for name in listed}
-
     results, problems = [], []
     for entry in index:
         status, evidence = cases.get(entry["ut_name"], ("not_run", "test was not collected"))
@@ -109,7 +108,7 @@ def main():
             "status": status,
             "evidence": evidence if status != "passed" else "all assertions held",
         })
-    extra = sorted(set(cases) - {entry["ut_name"] for entry in index})
+    extra = sorted(set(cases) - listed)
     if extra:
         problems.append("tests not listed in ut_index.json: %s" % ", ".join(extra))
 
@@ -118,6 +117,10 @@ def main():
     # broken scorer, as long as the test was collected; only missing or
     # skipped tests make the run unusable.
     unusable = [p for p in problems if not p.endswith(": error")]
+    if proc.returncode not in (0, 1):
+        reason = "pytest did not complete test execution (exit %d)" % proc.returncode
+        problems.append(reason)
+        unusable.append(reason)
     passed = sum(1 for r in results if r["status"] == "passed")
     total = len(results)
     document = {

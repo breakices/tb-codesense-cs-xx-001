@@ -28,7 +28,6 @@ from cs_helpers import (
     basket_with_products,
     cents,
     flat_shipping,
-    four_places,
     make_basket,
     make_offer,
     make_parent_with_child,
@@ -40,6 +39,7 @@ from cs_helpers import (
     settle,
     shipping_methods,
     shown,
+    stored_basket,
     stored_order,
     strategy,
 )
@@ -69,8 +69,8 @@ def test_unit_price_is_carried_at_four_places():
     """U2. 0.99 at 20%: unit tax 0.1980, unit gross 1.1880, not 0.20 / 1.19."""
     product = make_product("0.99")
     price = strategy.UK().fetch_for_product(product).price
-    assert four_places(price.tax) == D("0.1980")
-    assert four_places(price.incl_tax) == D("1.1880")
+    assert price.tax == D("0.1980")
+    assert price.incl_tax == D("1.1880")
 
 
 def test_tax_of_a_multi_unit_line_is_not_unit_tax_times_quantity():
@@ -98,8 +98,10 @@ def test_basket_totals_are_cents_with_percentage_offer_on_gross_prices():
     assert basket.total_incl_tax - basket.total_excl_tax == basket.total_tax
 
 
+@override_settings(OSCAR_OFFERS_INCL_TAX=False)
 def test_basket_totals_are_cents_with_percentage_offer_default_setting():
-    """U5. 3 x 9.99, 15% offer applied to net amounts (the default setting).
+    """U5. The UK strategy calculates the discount from the gross effective
+    price. The default configuration applies that discount to the net line.
 
     The offer takes 5.3946 (or 5.39 if it is cut to cents first) from the net
     line amount 29.97: 24.5754 or 24.58, both 24.58 in cents.
@@ -116,23 +118,27 @@ def test_parent_product_price_is_carried_at_four_places():
     of the same strategy: child at 0.99 -> tax 0.1980, gross 1.1880."""
     parent, _ = make_parent_with_child("0.99")
     price = strategy.UK().fetch_for_parent(parent).price
-    assert four_places(price.tax) == D("0.1980")
-    assert four_places(price.incl_tax) == D("1.1880")
+    assert price.tax == D("0.1980")
+    assert price.incl_tax == D("1.1880")
 
 
 def test_unit_tax_rounds_half_up_at_the_fourth_place():
     """U7. 0.03 at 17.5% = 0.00525, a tie at the fourth place: half up gives
     0.0053, banker's rounding gives 0.0052."""
-    product = make_product("0.03")
-    price = ReducedRate().fetch_for_product(product).price
-    assert four_places(price.tax) == D("0.0053")
+    basket, product = basket_with("0.03", 200, ReducedRate())
+    price = basket.strategy.fetch_for_product(product).price
+    assert price.tax == D("0.0053")
+    assert price.incl_tax == D("0.0353")
+    assert basket.total_tax == D("1.06")
+    assert basket.total_incl_tax == D("7.06")
 
 
 def test_parent_unit_tax_rounds_half_up_at_the_fourth_place():
     """U8. Same tie as U7 through the parent-product path."""
     parent, _ = make_parent_with_child("0.03")
     price = ReducedRate().fetch_for_parent(parent).price
-    assert four_places(price.tax) == D("0.0053")
+    assert price.tax == D("0.0053")
+    assert price.incl_tax == D("0.0353")
 
 
 def test_gross_amount_at_a_tie_is_half_up_in_the_basket_and_on_the_order():
@@ -315,20 +321,33 @@ def test_price_row_of_single_unit_agrees_with_its_order_line():
     assert rows[0].price_excl_tax == line.line_price_excl_tax
 
 
-def test_batches_settle_to_the_order_line_amount():
-    """U22. 100 x 0.01 at 20%, shipped and settled as 30 and then 70 units.
+def assert_settlement_ledger(line, amounts):
+    """Check each payment and the persisted unit-price rows on a positive sale."""
+    received = D("0.00")
+    for amount in amounts:
+        assert amount == cents(amount)
+        assert amount >= 0
+        received += amount
+        assert received <= line.line_price_incl_tax
+    assert received == line.line_price_incl_tax
 
-    The two settlements are amounts in cents and together they are the
-    amount stored on the order line, which is what the customer was told at
-    checkout.  With unit prices of 0.012 stored as 0.01 they come to 1.00
-    against a line of 1.20.
+    rows = list(line.prices.all())
+    assert sum(row.quantity for row in rows) == line.quantity
+    assert sum(row.price_incl_tax * row.quantity for row in rows) == line.line_price_incl_tax
+    assert sum(row.price_excl_tax * row.quantity for row in rows) == line.line_price_excl_tax
+
+
+def test_batches_settle_to_the_order_line_amount():
+    """U22. Cover unit rounding down and up, with a final one-unit shipment.
+
+    A 30-unit line of 0.036 has gross amount 1.08. At 0.04 each, the first
+    29 units would collect 1.16 and force a negative final charge.
     """
-    basket, _ = basket_with("0.01", 100)
-    order = place_order(basket)
-    line = only_line(order)
-    amounts = settle(order, line, [30, 70])
-    assert all(amount == cents(amount) for amount in amounts)
-    assert sum(amounts) == line.line_price_incl_tax
+    for net, quantity, shipments in [("0.01", 100, [30, 70]), ("0.03", 30, [29, 1])]:
+        basket, _ = basket_with(net, quantity)
+        order = place_order(basket)
+        line = only_line(order)
+        assert_settlement_ledger(line, settle(order, line, shipments))
 
 
 def test_unit_by_unit_settlement_adds_up_to_the_order_line_amount():
@@ -338,8 +357,7 @@ def test_unit_by_unit_settlement_adds_up_to_the_order_line_amount():
     order = place_order(basket)
     line = only_line(order)
     amounts = settle(order, line, [1] * 7)
-    assert all(amount == cents(amount) for amount in amounts)
-    assert sum(amounts) == line.line_price_incl_tax
+    assert_settlement_ledger(line, amounts)
 
 
 @INCL_TAX_OFFERS
@@ -351,8 +369,7 @@ def test_settlement_of_a_partly_discounted_line_adds_up():
     order = place_order(basket)
     line = only_line(order)
     amounts = settle(order, line, [2, 3])
-    assert all(amount == cents(amount) for amount in amounts)
-    assert sum(amounts) == line.line_price_incl_tax
+    assert_settlement_ledger(line, amounts)
 
 
 def test_order_placed_before_the_change_settles_its_remaining_units():
@@ -387,25 +404,28 @@ def test_no_price_change_warning_when_the_price_did_not_change():
     old row must compare at the persisted cent precision and must not report a
     change merely because the representation gained two extra places.
     """
-    basket, _ = basket_with("0.99", 1)
-    line = basket.all_lines()[0]
-    line.price_incl_tax = D("1.19")
-    line.price_excl_tax = D("0.99")
-    line.save(update_fields=["price_incl_tax", "price_excl_tax"])
+    basket, _ = stored_basket("0.99", "1.19")
     line = reload_basket(basket).all_lines()[0]
     assert line.get_warning() is None
+    line.refresh_from_db()
+    assert line.price_incl_tax == D("1.19")
 
 
 def test_price_change_warning_is_still_reported_for_a_real_change():
-    """U28. A pre-existing cent-priced row still warns for a real change."""
-    basket, product = basket_with("0.99", 1)
-    line = basket.all_lines()[0]
-    line.price_incl_tax = D("1.19")
-    line.price_excl_tax = D("0.99")
-    line.save(update_fields=["price_incl_tax", "price_excl_tax"])
+    """U28. Warn when the customer-visible cent price changes, including at upgrade."""
+    basket, product = stored_basket("0.99", "1.19")
     StockRecord.objects.filter(product=product).update(price=D("1.09"))
     line = reload_basket(basket).all_lines()[0]
     assert line.get_warning()
+
+    # The old strategy stored 0.70 for 0.60 at 17.5%. The new 0.7050 quote
+    # displays as 0.71, so this is a visible change with unchanged stock.
+    basket, _ = stored_basket("0.60", "0.70")
+    line = reload_basket(basket, ReducedRate()).all_lines()[0]
+    assert shown(line.unit_price_incl_tax) == D("0.71")
+    assert line.get_warning()
+    line.refresh_from_db()
+    assert line.price_incl_tax == D("0.70")
 
 
 def test_discounted_shipping_charge_is_stored_as_shown():
@@ -575,5 +595,4 @@ def test_batches_settle_to_the_order_line_amount_at_a_tie():
     order = place_order(basket)
     line = only_line(order)
     amounts = settle(order, line, [1, 2])
-    assert all(amount == cents(amount) for amount in amounts)
-    assert sum(amounts) == line.line_price_incl_tax
+    assert_settlement_ledger(line, amounts)

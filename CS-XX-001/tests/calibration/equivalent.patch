@@ -147,49 +147,8 @@ index dc0a075..8138bac 100644
          discount = charge * self.value / D("100.0")
 -        return discount.quantize(D("0.01"))
 +        return discount.quantize(D("0.01"), ROUND_HALF_UP)
-diff --git a/src/oscar/apps/order/processing.py b/src/oscar/apps/order/processing.py
-index 594a739..0c9264b 100644
---- a/src/oscar/apps/order/processing.py
-+++ b/src/oscar/apps/order/processing.py
-@@ -159,6 +159,9 @@ class EventHandler(object):
- 
-             # Consume prices in order of ID (this is the default but it's
-             # better to be explicit)
-+            completes_line = qty_to_skip + qty_to_consume == line.quantity
-+            settled_before = D("0.00")
-+            line_total = D("0.00")
-             qty_consumed = 0
-             for price in line.prices.all().order_by("id"):
-                 if qty_consumed == qty_to_consume:
-@@ -169,16 +172,25 @@ class EventHandler(object):
-                 if qty_available <= 0:
-                     # Skip the whole quantity of this price instance
-                     qty_to_skip -= price.quantity
-+                    settled_before += price.quantity * price.price_incl_tax
-                 else:
-                     # Need to account for some of this price instance and
-                     # track how many we needed to skip and how many we settled
-                     # for.
-+                    settled_before += qty_to_skip * price.price_incl_tax
-                     qty_to_include = min(qty_to_consume - qty_consumed, qty_available)
--                    total += qty_to_include * price.price_incl_tax
-+                    line_total += qty_to_include * price.price_incl_tax
-                     # There can't be any left to skip if we've included some in
-                     # our total
-                     qty_to_skip = 0
-                     qty_consumed += qty_to_include
-+            if completes_line:
-+                # Unit prices are kept in cents and need not add up to the
-+                # line.  The settlement that completes a line therefore takes
-+                # what is left of the stored line amount, so that all
-+                # settlements of a line come to exactly that amount.
-+                line_total = line.line_price_incl_tax - settled_before
-+            total += line_total
-         return total
- 
-     # Stock
 diff --git a/src/oscar/apps/order/utils.py b/src/oscar/apps/order/utils.py
-index 716affd..db418eb 100644
+index 716affd..0c21109 100644
 --- a/src/oscar/apps/order/utils.py
 +++ b/src/oscar/apps/order/utils.py
 @@ -1,4 +1,5 @@
@@ -198,7 +157,33 @@ index 716affd..db418eb 100644
  from decimal import Decimal as D
  
  from django.conf import settings
-@@ -169,6 +170,13 @@ class OrderCreator(object):
+@@ -21,6 +22,25 @@ Dispatcher = get_class("communication.utils", "Dispatcher")
+ Surcharge = get_model("order", "Surcharge")
+ 
+ 
++def _group_pence(unit_prices, quantities, line_amount):
++    """Allocate the stored line amount in proportion to each group's value."""
++    weights = [max(price, 0) * count for price, count in zip(unit_prices, quantities)]
++    if not any(weights):
++        weights = quantities
++    total_weight = sum(weights)
++    total_pence = int(line_amount * 100)
++    cumulative_weight = D(0)
++    previous_pence = 0
++    for weight in weights:
++        cumulative_weight += weight
++        boundary = (total_pence * cumulative_weight / total_weight).to_integral_value(
++            rounding=ROUND_HALF_UP
++        )
++        current_pence = int(boundary)
++        yield current_pence - previous_pence
++        previous_pence = current_pence
++
++
+ class OrderNumberGenerator(object):
+     """
+     Simple object for generating order numbers.
+@@ -169,6 +189,13 @@ class OrderCreator(object):
              order_data.update(extra_order_fields)
          if "site" not in order_data:
              order_data["site"] = Site._default_manager.get_current(request)
@@ -212,7 +197,7 @@ index 716affd..db418eb 100644
          order = Order(**order_data)
          order.save()
          if surcharges is not None:
-@@ -177,8 +185,12 @@ class OrderCreator(object):
+@@ -177,8 +204,12 @@ class OrderCreator(object):
                      order=order,
                      name=charge.surcharge.name,
                      code=charge.surcharge.code,
@@ -227,7 +212,7 @@ index 716affd..db418eb 100644
                      tax_code=charge.price.tax_code,
                  )
  
-@@ -231,6 +243,9 @@ class OrderCreator(object):
+@@ -231,6 +262,9 @@ class OrderCreator(object):
          if extra_line_fields:
              line_data.update(extra_line_fields)
  
@@ -237,18 +222,45 @@ index 716affd..db418eb 100644
          order_line = Line._default_manager.create(**line_data)
          self.create_line_price_models(order, order_line, basket_line)
          self.create_line_attributes(order, order_line, basket_line)
-@@ -279,8 +294,8 @@ class OrderCreator(object):
-             order_line.prices.create(
-                 order=order,
-                 quantity=quantity,
+@@ -274,15 +308,28 @@ class OrderCreator(object):
+         """
+         Creates the batch line price models
+         """
+-        breakdown = basket_line.get_price_breakdown()
+-        for price_incl_tax, price_excl_tax, quantity in breakdown:
+-            order_line.prices.create(
+-                order=order,
+-                quantity=quantity,
 -                price_incl_tax=price_incl_tax,
 -                price_excl_tax=price_excl_tax,
-+                price_incl_tax=price_incl_tax.quantize(D("0.01"), ROUND_HALF_UP),
-+                price_excl_tax=price_excl_tax.quantize(D("0.01"), ROUND_HALF_UP),
-                 tax_code=basket_line.tax_code,
-             )
+-                tax_code=basket_line.tax_code,
+-            )
++        groups = [row for row in basket_line.get_price_breakdown() if row[2] > 0]
++        if not groups:
++            return
++        gross_prices, net_prices, quantities = zip(*groups)
++        gross_totals = _group_pence(gross_prices, quantities, order_line.line_price_incl_tax)
++        net_totals = _group_pence(net_prices, quantities, order_line.line_price_excl_tax)
++        for quantity, gross, net in zip(quantities, gross_totals, net_totals):
++            gross_unit, gross_remainder = divmod(gross, quantity)
++            net_unit, net_remainder = divmod(net, quantity)
++            # The last units each absorb one extra penny. Split the row only
++            # where its gross or net unit price changes.
++            gross_cut = quantity - gross_remainder
++            net_cut = quantity - net_remainder
++            cuts = sorted({0, gross_cut, net_cut, quantity})
++            for first, stop in zip(cuts, cuts[1:]):
++                order_line.prices.create(
++                    order=order,
++                    quantity=stop - first,
++                    price_incl_tax=D(gross_unit + int(first >= gross_cut)).scaleb(-2),
++                    price_excl_tax=D(net_unit + int(first >= net_cut)).scaleb(-2),
++                    tax_code=basket_line.tax_code,
++                )
  
-@@ -304,7 +319,7 @@ class OrderCreator(object):
+     # pylint: disable=unused-argument
+     def create_line_attributes(self, order, order_line, basket_line):
+@@ -304,7 +351,7 @@ class OrderCreator(object):
              message=discount["message"] or "",
              offer_id=discount["offer"].id,
              frequency=discount["freq"],

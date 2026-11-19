@@ -1,0 +1,10 @@
+python 3.12.16 | Linux-7.0.12-linuxkit-x86_64-with-glibc2.36
+default context rounding: ROUND_HALF_EVEN
+unit tax 0.03 x 17.5%              exact 0.00525  quantize() 0.0052  ROUND_HALF_UP 0.0053  DIFFERENT
+shipping net 5.00 x 3.75 / 6.00    exact 3.125    quantize() 3.12    ROUND_HALF_UP 3.13    DIFFERENT
+shipping discount 2.50 x 25%       exact 0.625    quantize() 0.62    ROUND_HALF_UP 0.63    DIFFERENT
+line net 20.00 - 11.25 / 1.2       exact 10.625   quantize() 10.62   ROUND_HALF_UP 10.63   DIFFERENT
+gross 0.60 x 1.175                 exact 0.705    quantize() 0.70    ROUND_HALF_UP 0.71    DIFFERENT
+django 5.1.15 format_number(0.7050, max_digits=12, decimal_places=2) -> 0.70
+cases where the default differs from half up: 6
+exit status: 0
